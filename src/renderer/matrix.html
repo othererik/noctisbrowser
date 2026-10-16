@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NoctisBrowser — Network Monitor</title>
+  <link rel="stylesheet" href="css/matrix.css">
+</head>
+<body>
+
+  <!-- Dashboard Top Header -->
+  <header class="matrix-header">
+    <div class="matrix-title-wrap">
+      <div class="matrix-logo">
+        <img src="../../assets/icon.svg" alt="NoctisBrowser" width="24" height="24" style="border-radius: 5px;" />
+      </div>
+      <div>
+        <div class="matrix-title">Noctis Network Monitor</div>
+        <div class="matrix-subtitle">Aggregated telemetry, traffic topologies, and domain intelligence</div>
+      </div>
+    </div>
+    <div class="matrix-actions">
+      <button class="btn-matrix-action" id="btn-matrix-refresh">Refresh View</button>
+      <button class="btn-matrix-action primary" id="btn-matrix-export">Export HAR Archive</button>
+    </div>
+  </header>
+
+  <!-- Routing Configuration & Live Data Path Validator -->
+  <section class="routing-validator-panel">
+    <div class="routing-panel-header">
+      <div class="routing-header-left">
+        <div class="routing-status-indicator">
+          <span class="routing-dot active" id="routing-live-dot"></span>
+          <span class="routing-header-title">Active Network Routing &amp; Data Path</span>
+        </div>
+        <div class="routing-badges-wrap" id="routing-summary-badges">
+          <span class="routing-chip chip-mode" id="chip-routing-mode">Direct Mode</span>
+          <span class="routing-chip chip-relay" id="chip-routing-relay">Virtual Relay: Zurich</span>
+          <span class="routing-chip chip-doh" id="chip-routing-doh">DoH + DNSSEC Strict</span>
+          <span class="routing-chip chip-sec" id="chip-routing-sec">No Plain Text (HTTPS-Only)</span>
+          <span class="routing-chip chip-ip" id="chip-routing-ip">Exit IP: Protected</span>
+        </div>
+      </div>
+      <div class="routing-header-right">
+        <div class="routing-input-group">
+          <input type="text" id="input-test-url" class="routing-url-input" value="https://example.com" placeholder="https://example.com" spellcheck="false" />
+          <button class="btn-matrix-action primary" id="btn-test-routing-path" title="Run real-time path probe">
+            <span id="btn-test-icon">⚡</span>
+            <span id="btn-test-text">Test &amp; Validate Path</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4-Hop Interactive Path Visualization -->
+    <div class="routing-hops-container" id="routing-hops-container">
+      <!-- Hop 1 -->
+      <div class="routing-hop-card" id="hop-card-1">
+        <div class="hop-card-header">
+          <div class="hop-number-badge">1</div>
+          <div class="hop-name">Browser Session Gate</div>
+          <span class="hop-status-badge status-pending" id="hop-status-1">VERIFYING</span>
+        </div>
+        <div class="hop-message" id="hop-msg-1">Intercepting outbound requests &amp; enforcing encrypted transport</div>
+        <div class="hop-meta" id="hop-meta-1">
+          <span class="meta-tag" id="hop-meta-1-proxy">Proxy: Direct</span>
+          <span class="meta-latency" id="hop-latency-1">-- ms</span>
+        </div>
+      </div>
+
+      <div class="hop-connector">
+        <div class="connector-line"></div>
+      </div>
+
+      <!-- Hop 2 -->
+      <div class="routing-hop-card" id="hop-card-2">
+        <div class="hop-card-header">
+          <div class="hop-number-badge">2</div>
+          <div class="hop-name">Encrypted DNS (DoH)</div>
+          <span class="hop-status-badge status-pending" id="hop-status-2">VERIFYING</span>
+        </div>
+        <div class="hop-message" id="hop-msg-2">Resolving target IP via DoH with DNSSEC validation</div>
+        <div class="hop-meta" id="hop-meta-2">
+          <span class="meta-tag" id="hop-meta-2-dnssec">DNSSEC: Validated</span>
+          <span class="meta-latency" id="hop-latency-2">-- ms</span>
+        </div>
+      </div>
+
+      <div class="hop-connector">
+        <div class="connector-line"></div>
+      </div>
+
+      <!-- Hop 3 -->
+      <div class="routing-hop-card" id="hop-card-3">
+        <div class="hop-card-header">
+          <div class="hop-number-badge">3</div>
+          <div class="hop-name">Transport / Tunnel</div>
+          <span class="hop-status-badge status-pending" id="hop-status-3">VERIFYING</span>
+        </div>
+        <div class="hop-message" id="hop-msg-3">Testing local proxy tunnel / Tor daemon circuit</div>
+        <div class="hop-meta" id="hop-meta-3">
+          <span class="meta-tag" id="hop-meta-3-transport">Tunnel: 127.0.0.1</span>
+          <span class="meta-latency" id="hop-latency-3">-- ms</span>
+        </div>
+      </div>
+
+      <div class="hop-connector">
+        <div class="connector-line"></div>
+      </div>
+
+      <!-- Hop 4 -->
+      <div class="routing-hop-card" id="hop-card-4">
+        <div class="hop-card-header">
+          <div class="hop-number-badge">4</div>
+          <div class="hop-name">Egress &amp; Masked Path</div>
+          <span class="hop-status-badge status-pending" id="hop-status-4">VERIFYING</span>
+        </div>
+        <div class="hop-message" id="hop-msg-4">Validating end-to-end data path &amp; zero clearnet leaks</div>
+        <div class="hop-meta" id="hop-meta-4">
+          <span class="meta-tag" id="hop-meta-4-ip">Exit IP: Protected</span>
+          <span class="meta-latency" id="hop-latency-4">-- ms</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- KPI Overview Grid -->
+  <section class="kpi-grid">
+    <div class="kpi-card cyan">
+      <div class="kpi-label">Total Requests</div>
+      <div class="kpi-value" id="kpi-total-reqs">0</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">Bandwidth Transferred</div>
+      <div class="kpi-value" id="kpi-total-bytes">0 B</div>
+    </div>
+    <div class="kpi-card purple">
+      <div class="kpi-label">Blocked Trackers</div>
+      <div class="kpi-value" id="kpi-total-blocked">0</div>
+    </div>
+    <div class="kpi-card amber">
+      <div class="kpi-label">Paused / Intercepted</div>
+      <div class="kpi-value" id="kpi-total-paused">0</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Active Destinations</div>
+      <div class="kpi-value" id="kpi-active-hosts">0</div>
+    </div>
+  </section>
+
+  <!-- Two-Column Leaderboard Panels -->
+  <section class="dashboard-grid">
+    <!-- Panel 1: Top Destinations by Bandwidth -->
+    <div class="dashboard-panel">
+      <div class="panel-title">
+        <span class="panel-dot dot-cyan"></span>
+        <span>Heaviest Destinations by Bandwidth</span>
+      </div>
+      <div class="leaderboard-list" id="leaderboard-destinations">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+
+    <!-- Panel 2: Slowest Endpoints by Latency -->
+    <div class="dashboard-panel">
+      <div class="panel-title">
+        <span class="panel-dot dot-amber"></span>
+        <span>Slowest Responses (Latency Leaderboard)</span>
+      </div>
+      <div class="leaderboard-list" id="leaderboard-latency">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </section>
+
+  <!-- Full-Width Source ➔ Destination Flow Matrix -->
+  <section class="dashboard-panel">
+    <div class="panel-title">
+      <span class="panel-dot dot-purple"></span>
+      <span>Source (Initiator Script) &rarr; Destination (Host) Topology</span>
+    </div>
+    <div class="flow-container" id="flow-matrix-container">
+      <!-- Rendered dynamically -->
+    </div>
+  </section>
+
+  <script src="js/matrix.js"></script>
+</body>
+</html>

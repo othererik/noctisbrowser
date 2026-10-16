@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NoctisBrowser — Privacy, Tor &amp; Storage Vault</title>
+  <link rel="stylesheet" href="css/vault.css">
+</head>
+<body>
+
+  <!-- Vault Top Header -->
+  <header class="vault-header">
+    <div class="vault-title-wrap">
+      <div class="vault-logo">
+        <img src="../../assets/icon.svg" alt="NoctisBrowser" width="28" height="28" style="border-radius: 6px;" />
+      </div>
+      <div>
+        <div class="vault-title">Noctis Privacy &amp; Dark Web Vault</div>
+        <div class="vault-subtitle">Paranoid Anti-Fingerprinting, Built-in Browser VPN, Tor (.onion) / Dark Web Routing &amp; 100% Transparent Ephemeral Storage</div>
+      </div>
+    </div>
+    <div class="vault-actions">
+      <div id="vault-sync-status" class="vault-sync-badge state-saved" title="Settings Synchronization Status">
+        <span class="sync-dot"></span>
+        <span id="sync-status-text">Settings Saved</span>
+      </div>
+      <button class="btn-vault primary" id="btn-reroll-all" title="Instantly generate a completely new randomized paranoid identity">
+        Re-roll Identity Now
+      </button>
+      <button class="btn-vault danger" id="btn-burn-vault" title="Panic / Burn Identity: Wipe storage, rotate fingerprint &amp; Tor/VPN circuit">
+        Burn Identity
+      </button>
+      <button class="btn-vault danger" id="btn-purge-storage-top" title="Purge all active ephemeral cookies and cache immediately">
+        Purge Storage
+      </button>
+      <button class="btn-vault" id="btn-vault-refresh" title="Reload active parameters and file metrics">
+        Refresh View
+      </button>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="vault-nav-tabs">
+    <button class="nav-tab-btn active" data-target="tab-identity">
+      Paranoid Identity Tuner &amp; Probe
+    </button>
+    <button class="nav-tab-btn" data-target="tab-tor-vpn">
+      Tor, Dark Web &amp; Browser VPN
+    </button>
+    <button class="nav-tab-btn" data-target="tab-storage">
+      Transparent Ephemeral Storage Inspector
+    </button>
+  </nav>
+
+  <!-- Sticky Unsaved Changes Notification Banner -->
+  <div id="vault-unsaved-banner" class="unsaved-banner hidden">
+    <div class="unsaved-banner-left">
+      <span class="unsaved-pulse-dot"></span>
+      <div class="unsaved-banner-info">
+        <span class="unsaved-banner-title">Unsaved Changes Detected</span>
+        <span class="unsaved-banner-desc">You have modified settings that are not active yet. Click <strong>"Save &amp; Apply Profile"</strong> to activate them in your running browser sessions.</span>
+      </div>
+    </div>
+    <div class="unsaved-banner-actions">
+      <button class="btn-vault primary" id="banner-btn-apply">
+        Save &amp; Apply Now
+      </button>
+      <button class="btn-vault" id="banner-btn-discard">
+        Discard Changes
+      </button>
+    </div>
+  </div>
+
+  <!-- Live Action Toast -->
+  <div id="vault-toast" class="vault-toast hidden">
+    <span class="toast-icon">✓</span>
+    <span id="vault-toast-msg">Settings Applied Successfully!</span>
+  </div>
+
+  <!-- TAB 1: PARANOID IDENTITY TUNER & PROBE -->
+  <main id="tab-identity" class="vault-section active">
+    
+    <!-- Dynamic Runtime Variation & Umbra/Shadow Stealth Banner -->
+    <div class="vault-card" style="margin-bottom: 20px;">
+      <div class="vault-card-header">
+        <div class="vault-card-title">
+          Dynamic Runtime Variation &amp; Stealth Hardening (Umbra / Shadow / Tor Defenses)
+        </div>
+        <span class="badge purple" id="drift-status-badge">DRIFT ACTIVE</span>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <span class="toggle-title">Vary Parameters Continuously During Runtime</span>
+          <span class="toggle-desc">Automatically rotates noise seeds and mutates canvas/audio harmonic phase during execution so long-lived tabs or trackers cannot correlate sessions</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggle-runtime-drift" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row" style="margin-top: 8px;">
+        <div class="toggle-info">
+          <span class="toggle-title">Viewport Letterboxing (200×100 Bucket Quantization)</span>
+          <span class="toggle-desc">Quantizes reported innerWidth, innerHeight, and visualViewport dimensions to standardized 200×100 buckets to defeat window-size fingerprinting</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggle-letterboxing" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row" style="margin-top: 8px;">
+        <div class="toggle-info">
+          <span class="toggle-title">Shadow Mode: OS Screen-Capture &amp; Recording Exclusion</span>
+          <span class="toggle-desc">Instructs the operating system window compositor to block third-party screen recording and screenshot telemetry from capturing browser content</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggle-screen-capture" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-top: 10px;">
+        <div class="form-group" style="flex: 1; min-width: 200px;">
+          <label class="form-label">Drift Variation Frequency</label>
+          <select id="select-drift-interval" class="form-control">
+            <option value="30">Every 30 Seconds (High Entropy)</option>
+            <option value="60" selected>Every 60 Seconds (Recommended Paranoid)</option>
+            <option value="120">Every 2 Minutes</option>
+            <option value="300">Every 5 Minutes</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="flex: 1; min-width: 200px;">
+          <label class="form-label">Runtime Drift Status</label>
+          <div style="font-size: 12px; font-family: var(--font-mono); color: var(--accent-cyan); padding: 8px 10px; background: var(--bg-secondary); border-radius: 6px; border: 1px solid var(--border-muted);">
+            Cycles: <span id="drift-count-val">0</span> • Last Varied: <span id="drift-last-val">Just now</span>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: flex-end; padding-top: 18px;">
+          <button class="btn-vault" id="btn-drift-now" title="Rotate seeds and noise phase immediately without persona switch">
+            Drift Micro-Parameters Now
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Parameter Customization Form & Live Verification Probe -->
+    <div class="vault-grid-2">
+      <!-- Column 1: Configurable Fingerprint Tuner -->
+      <div class="vault-card">
+        <div class="vault-card-header">
+          <div class="vault-card-title">
+            Tunable Fingerprint Parameters
+          </div>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <span class="badge green" id="badge-identity-save-state">SAVED</span>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <!-- Preset Selector -->
+          <div class="form-group full">
+            <label class="form-label">Active Fingerprint Persona Preset</label>
+            <select id="select-preset" class="form-control">
+              <option value="macos-mseries" selected>macOS Apple Silicon (M-Series)</option>
+              <option value="windows-nvidia">Windows 11 x64 (NVIDIA GeForce RTX)</option>
+              <option value="linux-amd">Linux Ubuntu x86_64 (AMD Radeon RX)</option>
+              <option value="custom">Custom Persona</option>
+            </select>
+          </div>
+
+          <!-- Operating System -->
+          <div class="form-group">
+            <label class="form-label">Platform OS String</label>
+            <input type="text" id="input-os" class="form-control" value="macOS" />
+          </div>
+
+          <!-- Navigator Platform -->
+          <div class="form-group">
+            <label class="form-label">navigator.platform</label>
+            <input type="text" id="input-platform" class="form-control" value="MacIntel" />
+          </div>
+
+          <!-- User Agent -->
+          <div class="form-group full">
+            <label class="form-label">User-Agent Header &amp; Navigator</label>
+            <input type="text" id="input-useragent" class="form-control mono" value="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36" />
+          </div>
+
+          <!-- Hardware Concurrency (Cores) -->
+          <div class="form-group full">
+            <label class="form-label">
+              <span>CPU Hardware Concurrency (Cores)</span>
+              <span class="range-val-badge" id="badge-cores">8</span>
+            </label>
+            <div class="range-slider-wrap">
+              <input type="range" id="range-cores" class="range-slider" min="2" max="32" step="2" value="8" />
+            </div>
+          </div>
+
+          <!-- Device Memory (RAM) -->
+          <div class="form-group full">
+            <label class="form-label">
+              <span>Device Memory (RAM GB)</span>
+              <span class="range-val-badge" id="badge-memory">16 GB</span>
+            </label>
+            <div class="range-slider-wrap">
+              <input type="range" id="range-memory" class="range-slider" min="2" max="64" step="2" value="16" />
+            </div>
+          </div>
+
+          <!-- WebGL GPU Vendor -->
+          <div class="form-group full">
+            <label class="form-label">WebGL Unmasked Vendor</label>
+            <input type="text" id="input-webgl-vendor" class="form-control" value="Google Inc. (Apple)" />
+          </div>
+
+          <!-- WebGL GPU Renderer -->
+          <div class="form-group full">
+            <label class="form-label">WebGL Unmasked Renderer</label>
+            <input type="text" id="input-webgl-renderer" class="form-control mono" value="ANGLE (Apple, Apple M2 Pro, OpenGL 4.1)" />
+          </div>
+
+          <!-- Canvas Noise Jitter Mode -->
+          <div class="form-group">
+            <label class="form-label">Canvas Noise Jitter Mode</label>
+            <select id="select-canvas-mode" class="form-control">
+              <option value="paranoid" selected>Paranoid (Multi-Channel Micro-Jitter)</option>
+              <option value="subtle">Subtle (1-bit LSB Jitter)</option>
+              <option value="extreme">Extreme (Cryptographic Noise Mask)</option>
+              <option value="off">Off (Raw Pixel Output)</option>
+            </select>
+          </div>
+
+          <!-- AudioContext Noise Mode -->
+          <div class="form-group">
+            <label class="form-label">AudioContext Noise Mode</label>
+            <select id="select-audio-mode" class="form-control">
+              <option value="paranoid" selected>Paranoid (Sub-Audible Micro-Harmonics)</option>
+              <option value="subtle">Subtle (1e-8 Phase Drift)</option>
+              <option value="extreme">Extreme (High Frequency Masking)</option>
+              <option value="off">Off (Unmodified Buffer)</option>
+            </select>
+          </div>
+
+          <!-- Active Noise Seeds -->
+          <div class="form-group">
+            <label class="form-label">Canvas Noise Seed</label>
+            <input type="number" id="input-canvas-seed" class="form-control mono" value="849201" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Audio Noise Seed</label>
+            <input type="number" id="input-audio-seed" class="form-control mono" value="391823" />
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 16px;">
+          <button class="btn-vault primary" id="btn-save-profile" style="flex: 1;">
+            Save &amp; Apply Profile
+          </button>
+          <button class="btn-vault" id="btn-reset-profile" title="Revert to initial defaults">
+            Reset Preset
+          </button>
+        </div>
+      </div>
+
+      <!-- Column 2: Live Fingerprint Verification Probe -->
+      <div class="vault-card">
+        <div class="vault-card-header">
+          <div class="vault-card-title">
+            Live Verification Probe (What Web Scripts See)
+          </div>
+          <span class="badge green">LIVE EXECUTING</span>
+        </div>
+
+        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+          NoctisBrowser runs live fingerprint probes directly against the active persona in real time to show you the exact spoofed signatures exposed to websites.
+        </p>
+
+        <div class="probe-grid">
+          <!-- Canvas Probe -->
+          <div class="probe-item" style="grid-column: 1 / -1;">
+            <div class="probe-title">
+              Canvas 2D Signature &amp; Perturbation Hash
+            </div>
+            <div class="canvas-preview-wrap">
+              <canvas id="canvas-probe-preview" width="160" height="40"></canvas>
+              <div>
+                <div class="probe-value probe-hash" id="probe-canvas-hash">Computing...</div>
+                <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">
+                  Perturbed via active seed. Generates unique hash on every re-roll.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- WebGL Renderer Probe -->
+          <div class="probe-item" style="grid-column: 1 / -1;">
+            <div class="probe-title">
+              WebGL &amp; WebGPU Unmasked Hardware Detected
+            </div>
+            <div class="probe-value" id="probe-webgl-val" style="color: var(--accent-cyan);">Querying...</div>
+          </div>
+
+          <!-- Audio Fingerprint Probe -->
+          <div class="probe-item">
+            <div class="probe-title">
+              AudioContext Hash
+            </div>
+            <div class="probe-value probe-hash" id="probe-audio-hash">Computing...</div>
+          </div>
+
+          <!-- OfflineAudioContext Probe (FingerprintJS vector) -->
+          <div class="probe-item">
+            <div class="probe-title">
+              OfflineAudioContext Defense
+            </div>
+            <div class="probe-value probe-hash" id="probe-offline-audio-hash">Computing...</div>
+          </div>
+
+          <!-- Viewport Letterboxing Probe -->
+          <div class="probe-item">
+            <div class="probe-title">
+              Viewport Letterboxing
+            </div>
+            <div class="probe-value" id="probe-letterbox-val" style="color: var(--accent-green);">200×100 Bucketed</div>
+          </div>
+
+          <!-- Storage Quota Probe -->
+          <div class="probe-item">
+            <div class="probe-title">
+              Storage Quota (Anti-Incognito)
+            </div>
+            <div class="probe-value" id="probe-storage-quota-val" style="color: var(--accent-green);">10.0 GB Uniform</div>
+          </div>
+
+          <!-- Font Metrics Probe (Canvas measureText) -->
+          <div class="probe-item">
+            <div class="probe-title">
+              Font Metrics (measureText)
+            </div>
+            <div class="probe-value" id="probe-font-val" style="color: var(--accent-cyan);">Jitter Protected</div>
+          </div>
+
+          <!-- Sensors / Gamepad / Keyboard Probe -->
+          <div class="probe-item">
+            <div class="probe-title">
+              Sensors / Gamepad / Keyboard
+            </div>
+            <div class="probe-value" id="probe-sensors-val" style="color: var(--accent-green);">Neutralized (US-QWERTY)</div>
+          </div>
+
+          <!-- Hardware Concurrency Probe -->
+          <div class="probe-item">
+            <div class="probe-title">
+              CPU Logical Cores
+            </div>
+            <div class="probe-value" id="probe-cores-val">--</div>
+          </div>
+
+          <!-- Device Memory Probe -->
+          <div class="probe-item">
+            <div class="probe-title">
+              Device Memory
+            </div>
+            <div class="probe-value" id="probe-memory-val">--</div>
+          </div>
+
+          <!-- Platform Probe -->
+          <div class="probe-item">
+            <div class="probe-title">
+              navigator.platform
+            </div>
+            <div class="probe-value" id="probe-platform-val">--</div>
+          </div>
+
+          <!-- WebRTC Shield Probe -->
+          <div class="probe-item">
+            <div class="probe-title">
+              WebRTC UDP &amp; Local IP Filter
+            </div>
+            <div class="probe-value" style="color: var(--accent-green);">LAN IPs Stripped</div>
+          </div>
+        </div>
+
+        <div style="margin-top: 16px; padding: 12px; background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px;">
+          <div style="font-size: 12px; font-weight: 700; color: #d8b4fe; margin-bottom: 4px;">
+            Fingerprint Classification: UNLINKABLE &amp; DYNAMIC
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted); line-height: 1.5;">
+            Tracking libraries (FingerprintJS, ThreatMetrix, PerimeterX) rely on static hardware hashes. Because NoctisBrowser combines 200×100 viewport letterboxing, WebGPU/Storage normalization, and continuous micro-jitter seed drift, your cross-site fingerprint is non-deterministic.
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- TAB 2: TOR, DARK WEB PROTOCOLS & BROWSER VPN -->
+  <main id="tab-tor-vpn" class="vault-section">
+    <div class="vault-grid-2">
+      <!-- Column 1: Browser VPN & Onion / Dark Web Routing Controls -->
+      <div class="vault-card">
+        <div class="vault-card-header">
+          <div class="vault-card-title">
+            Browser VPN, Tor Onion Router &amp; Tunnel Controls
+          </div>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <span class="badge green" id="torvpn-mode-badge">DIRECT</span>
+            <span class="badge green" id="badge-torvpn-save-state">SAVED</span>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group full">
+            <label class="form-label">Active Network Routing Mode</label>
+            <select id="select-routing-mode" class="form-control">
+              <option value="direct">Direct Connection (With Auto Dark-Web Protocol Bridge)</option>
+              <option value="built-in-vpn">Noctis Built-in Browser VPN (Encrypted Tunnel + DoH)</option>
+              <option value="tor">Tor Onion Router (SOCKS5 127.0.0.1:9050 / Onion Bridge)</option>
+              <option value="i2p">I2P Garlic Network (127.0.0.1:4444 / Outproxy)</option>
+              <option value="custom-proxy">Custom SOCKS5 / HTTPS Proxy Tunnel</option>
+            </select>
+          </div>
+
+          <!-- Verified External IP Status Banner -->
+          <div class="form-group full" style="margin-top: -2px;">
+            <div class="masked-ip-banner">
+              <div class="masked-ip-header">
+                <span class="masked-ip-label">EXTERNAL IP SEEN BY WEBSITES:</span>
+                <span id="masked-ip-status-pill" class="badge amber">DIRECT / UNMASKED</span>
+              </div>
+              <div class="masked-ip-row">
+                <span class="masked-ip-val mono" id="torvpn-masked-ip-val">Querying IP...</span>
+                <button type="button" class="btn-vault sm" id="btn-check-my-ip">Verify My IP</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group full">
+            <label class="form-label">Built-in Browser VPN Exit Sanctuary &amp; DoH Resolver</label>
+            <select id="select-vpn-relay" class="form-control">
+              <option value="ch-zurich">Switzerland (Zurich) — Quad9 Encrypted DoH Sanctuary</option>
+              <option value="is-reykjavik">Iceland (Reykjavik) — Zero-Log Privacy Sanctuary</option>
+              <option value="se-stockholm">Sweden (Stockholm) — Mullvad Encrypted DoH Core</option>
+              <option value="de-frankfurt">Germany (Frankfurt) — EU Privacy Backbone</option>
+              <option value="us-newyork">United States (New York) — High-Speed Encrypted Relay</option>
+            </select>
+          </div>
+
+          <div class="form-group full">
+            <label class="form-label">Custom Proxy Rule (Used in Custom Proxy Mode)</label>
+            <input type="text" id="input-custom-proxy" class="form-control mono" value="socks5://127.0.0.1:1080" placeholder="socks5://127.0.0.1:1080 or http://127.0.0.1:8080" />
+          </div>
+        </div>
+
+        <div class="toggle-row" style="margin-top: 12px;">
+          <div class="toggle-info">
+            <span class="toggle-title">Encrypted DNS-over-HTTPS (DoH) Resolution</span>
+            <span class="toggle-desc">Resolves domain names over encrypted HTTPS inside the Noctis VPN tunnel so your ISP never sees plaintext DNS queries</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="toggle-doh" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row" style="margin-top: 8px;">
+          <div class="toggle-info">
+            <span class="toggle-title">Force Strict DNSSEC Cryptographic Validation</span>
+            <span class="toggle-desc">Enforces DNSSEC (RFC 4035) with the DO (DNSSEC OK) flag and verifies Authenticated Data (AD) against the root trust anchor, rejecting forged, tampered, or hijacked DNS responses</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="toggle-dnssec" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row" style="margin-top: 8px;">
+          <div class="toggle-info">
+            <span class="toggle-title">Require Security / No Plain Text on Onion Router &amp; VPN</span>
+            <span class="toggle-desc">Enforces HTTPS-only encryption. Automatically upgrades unencrypted HTTP to HTTPS and blocks plaintext HTTP over Tor onion routing and VPN tunnels to prevent exit node sniffing</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="toggle-require-secure" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row" style="margin-top: 8px;">
+          <div class="toggle-info">
+            <span class="toggle-title">Strict Network Kill-Switch</span>
+            <span class="toggle-desc">Blocks all clearnet traffic immediately if Tor or I2P mode is selected and the local daemon is offline</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="toggle-killswitch" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row" style="margin-top: 8px;">
+          <div class="toggle-info">
+            <span class="toggle-title">Automatic Tor Onion Gateway Bridge Fallback (.onion)</span>
+            <span class="toggle-desc">When no local Tor SOCKS5 daemon is running on :9050/:9150, automatically bridges .onion domains over HTTPS so .onion sites work out of the box</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="toggle-onion-fallback" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="form-grid" style="margin-top: 12px;">
+          <div class="form-group">
+            <label class="form-label">Onion Bridge Host (.onion)</label>
+            <input type="text" id="input-onion-gateway" class="form-control mono" value="onion.ly" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">IPFS Gateway (ipfs:// / ipns://)</label>
+            <input type="text" id="input-ipfs-gateway" class="form-control mono" value="https://dweb.link" />
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;">
+          <button class="btn-vault primary" id="btn-save-torvpn" style="flex: 1;">
+            Apply Routing &amp; VPN Configuration
+          </button>
+          <button class="btn-vault" id="btn-rotate-circuit" title="Send Tor NEWNYM signal, flush DNS cache, and rotate tunnel circuit">
+            Rotate Circuit (New Identity)
+          </button>
+        </div>
+
+        <!-- Active Circuit & Tunnel Telemetry Box -->
+        <div style="margin-top: 16px; padding: 12px; background: var(--bg-secondary); border: 1px solid var(--border-muted); border-radius: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-dim);">Active Circuit &amp; Tunnel Telemetry</span>
+            <span class="mono" style="font-size: 11px; color: var(--accent-cyan);" id="torvpn-circuit-id">NOCTIS-CIRCUIT-000000</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; font-size: 11px; font-family: var(--font-mono);">
+            <div>Tunnel Port: <span id="torvpn-tunnel-port" style="color: var(--accent-green);">--</span></div>
+            <div>DoH Queries: <span id="torvpn-doh-count" style="color: var(--text-main);">0</span></div>
+            <div>DNSSEC OK: <span id="torvpn-dnssec-count" style="color: var(--accent-cyan);">0</span></div>
+            <div>DarkWeb: <span id="torvpn-darkweb-count" style="color: var(--accent-purple);">0</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Column 2: Supported Dark Web Protocols & Live Protocol Resolver -->
+      <div class="vault-card">
+        <div class="vault-card-header">
+          <div class="vault-card-title">
+            Dark Web &amp; Decentralized Protocol Matrix
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button class="btn-vault" id="btn-probe-daemons" style="padding: 4px 8px; font-size: 11px;">
+              Probe Daemons
+            </button>
+            <button class="btn-vault" id="btn-download-tor" style="padding: 4px 8px; font-size: 11px; background: rgba(6, 182, 212, 0.15); border-color: rgba(6, 182, 212, 0.4); color: var(--accent-cyan);">
+              ⬇ Download Native Tor
+            </button>
+            <button class="btn-vault primary" id="btn-start-tor" style="padding: 4px 8px; font-size: 11px;">
+              Bootstrap Tor
+            </button>
+          </div>
+        </div>
+
+        <!-- Dedicated Native Tor Daemon Status & Installer Box -->
+        <div id="tor-daemon-box" style="margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; background: var(--bg-secondary); border: 1px solid var(--border-muted);">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 12px; font-weight: 700; color: var(--text-main);">Native Tor Daemon</span>
+              <span id="tor-daemon-status-pill" class="badge cyan">Checking...</span>
+            </div>
+            <span id="tor-binary-path-val" class="mono" style="font-size: 10px; color: var(--text-dim); max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Searching binary...</span>
+          </div>
+          <div id="tor-daemon-subtext" style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+            Bundled native binary runs in background. Tor works automatically without external apps.
+          </div>
+          <!-- Download Progress Indicator -->
+          <div id="tor-download-progress-wrap" style="display: none; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border-subtle);">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
+              <span id="tor-download-status-text" style="color: var(--accent-cyan);">Downloading Tor Expert Bundle...</span>
+              <span id="tor-download-percent-text" class="mono" style="color: var(--text-main);">0%</span>
+            </div>
+            <div style="height: 5px; background: var(--bg-main); border-radius: 3px; overflow: hidden;">
+              <div id="tor-download-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-green)); transition: width 0.2s;"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="tor-bootstrap-feedback" style="display: none; margin-bottom: 10px; padding: 8px 10px; border-radius: 6px; font-size: 11.5px; background: rgba(6, 182, 212, 0.12); border: 1px solid rgba(6, 182, 212, 0.3); color: var(--accent-cyan);"></div>
+
+        <div id="protocols-status-list" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
+          <!-- Populated dynamically -->
+        </div>
+
+        <!-- Interactive Dark Web Protocol Resolver & Directory -->
+        <div style="border-top: 1px solid var(--border-subtle); padding-top: 14px;">
+          <div style="font-size: 12px; font-weight: 700; color: var(--text-main); margin-bottom: 8px;">
+            Live Dark Web &amp; Decentralized URL Resolver
+          </div>
+          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+            <input type="text" id="input-test-darkweb-url" class="form-control mono" style="flex: 1;" value="https://duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion" placeholder="Enter .onion, .i2p, .loki, ipfs://, or .eth address..." />
+            <button class="btn-vault primary" id="btn-test-darkweb-url">Resolve</button>
+            <button class="btn-vault" id="btn-open-darkweb-url">Open in Tab ↗</button>
+          </div>
+          <div id="darkweb-resolve-output" class="mono" style="font-size: 11px; padding: 8px 10px; background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 6px; color: var(--accent-cyan); word-break: break-all;">
+            Ready to resolve dark web or decentralized URI.
+          </div>
+
+          <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-dim); margin: 14px 0 8px 0;">
+            Verified Dark Web &amp; Decentralized Landmarks
+          </div>
+          <div id="darkweb-directory-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 210px; overflow-y: auto;">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- TAB 3: TRANSPARENT EPHEMERAL STORAGE INSPECTOR -->
+  <main id="tab-storage" class="vault-section">
+    
+    <!-- Ephemeral Isolation Directory Banner -->
+    <div class="storage-overview-banner">
+      <div class="storage-path-box">
+        <span class="storage-path-label">Active Ephemeral Workspace Directory</span>
+        <div class="storage-path-val" id="storage-path-display">Scanning temporary directory...</div>
+        <div style="display: flex; gap: 8px; margin-top: 6px;">
+          <button class="btn-vault" id="btn-copy-path" style="padding: 4px 10px; font-size: 11px;">
+            Copy Path
+          </button>
+          <button class="btn-vault" id="btn-open-folder" style="padding: 4px 10px; font-size: 11px;">
+            Reveal in Finder
+          </button>
+        </div>
+      </div>
+
+      <div class="storage-kpi-group">
+        <div class="storage-kpi">
+          <span class="storage-kpi-val" id="storage-total-size">0 B</span>
+          <span class="storage-kpi-label">Active Disk Residue</span>
+        </div>
+        <div class="storage-kpi">
+          <span class="storage-kpi-val" id="storage-total-files">0</span>
+          <span class="storage-kpi-label">Ephemeral Files</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Category Breakdown Cards -->
+    <div class="categories-grid" id="storage-categories-grid">
+      <!-- Rendered dynamically -->
+    </div>
+
+    <!-- Live File Explorer Table -->
+    <div class="file-table-wrap">
+      <div class="file-table-toolbar">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <input type="text" class="file-search-input" id="file-search-input" placeholder="Search files by path or name..." />
+          <div class="filter-pills" id="file-filter-pills">
+            <button class="pill-btn active" data-cat="all">All (<span id="count-pill-all">0</span>)</button>
+            <button class="pill-btn" data-cat="cookies">Cookies (<span id="count-pill-cookies">0</span>)</button>
+            <button class="pill-btn" data-cat="localStorage">Local Storage (<span id="count-pill-localStorage">0</span>)</button>
+            <button class="pill-btn" data-cat="indexedDB">IndexedDB (<span id="count-pill-indexedDB">0</span>)</button>
+            <button class="pill-btn" data-cat="gpuCache">GPU Cache (<span id="count-pill-gpuCache">0</span>)</button>
+            <button class="pill-btn" data-cat="codeCache">Code Cache (<span id="count-pill-codeCache">0</span>)</button>
+            <button class="pill-btn" data-cat="config">Config (<span id="count-pill-config">0</span>)</button>
+            <button class="pill-btn" data-cat="other">Other (<span id="count-pill-other">0</span>)</button>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button class="btn-vault" id="btn-refresh-files">
+            Refresh File List
+          </button>
+          <button class="btn-vault danger" id="btn-purge-storage-files">
+            Purge All Ephemeral Files Now
+          </button>
+        </div>
+      </div>
+
+      <div style="max-height: 440px; overflow-y: auto;">
+        <table class="file-table">
+          <thead>
+            <tr>
+              <th style="width: 45%;">Relative File Path</th>
+              <th style="width: 20%;">Category</th>
+              <th style="width: 15%;">Size</th>
+              <th style="width: 20%;">Last Modified</th>
+            </tr>
+          </thead>
+          <tbody id="file-table-body">
+            <!-- Rendered dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Zero-Trace Policy Guarantee Box -->
+    <div class="guarantee-box">
+      <div class="guarantee-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+      </div>
+      <div>
+        <div class="guarantee-title">Zero-Trace Disk Persistence Policy Guarantee</div>
+        <div class="guarantee-text">
+          NoctisBrowser allocates a dedicated ephemeral directory under <code>/tmp</code> (or OS temp) on startup and routes all Chromium <code>userData</code> and <code>sessionData</code> directly to it. Chromium is launched with <code>--disable-http-cache --disk-cache-size=0 --incognito</code>. When NoctisBrowser terminates, an immediate synchronous wipe executes, followed by a detached native reaper process (<code>sleep 0.2; rm -rf ...</code>) that guarantees 100% unconditional deletion with zero disk residue left behind.
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="js/vault.js"></script>
+</body>
+</html>

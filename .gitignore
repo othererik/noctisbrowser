@@ -1,0 +1,8 @@
+node_modules/
+*.log
+.DS_Store
+dist/
+*.har
+native/build/*.o
+native/build/NetScopeNative
+native/build/test_*

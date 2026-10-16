@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0f1d"/>
+      <stop offset="50%" stop-color="#11182c"/>
+      <stop offset="100%" stop-color="#060913"/>
+    </linearGradient>
+    <radialGradient id="coreGlow" cx="50%" cy="46%" r="50%">
+      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.45"/>
+      <stop offset="55%" stop-color="#06b6d4" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#090d16" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="shieldGrad" x1="15%" y1="10%" x2="85%" y2="90%">
+      <stop offset="0%" stop-color="#a855f7"/>
+      <stop offset="50%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="crescentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e0e7ff"/>
+      <stop offset="45%" stop-color="#c084fc"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+    <filter id="dropShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#000000" flood-opacity="0.65"/>
+    </filter>
+  </defs>
+
+  <!-- macOS Rounded Squircle Base -->
+  <rect x="64" y="64" width="896" height="896" rx="200" ry="200" fill="url(#bgGrad)" stroke="#2d3b55" stroke-width="10"/>
+
+  <!-- Subtle Inner Border Rim -->
+  <rect x="84" y="84" width="856" height="856" rx="182" ry="182" fill="none" stroke="url(#shieldGrad)" stroke-width="3" stroke-opacity="0.35"/>
+
+  <!-- Ambient Nebula Core Glow -->
+  <circle cx="512" cy="500" r="380" fill="url(#coreGlow)"/>
+
+  <!-- Outer Stealth Shield Polygon -->
+  <path d="M512 170 L784 282 L784 516 C784 698 664 824 512 878 C360 824 240 698 240 516 L240 282 Z"
+        fill="#0d1324" fill-opacity="0.85"
+        stroke="url(#shieldGrad)" stroke-width="26" stroke-linejoin="round"
+        filter="url(#dropShadow)"/>
+
+  <!-- Concentric Onion / Tor Routing Rings -->
+  <circle cx="512" cy="512" r="210" fill="none" stroke="#6366f1" stroke-width="5" stroke-dasharray="14 12" stroke-opacity="0.45"/>
+  <circle cx="512" cy="512" r="154" fill="none" stroke="#06b6d4" stroke-width="5" stroke-opacity="0.4"/>
+
+  <!-- Orbital Meridian Arcs -->
+  <ellipse cx="512" cy="512" rx="92" ry="210" fill="none" stroke="#8b5cf6" stroke-width="5" stroke-opacity="0.38" transform="rotate(-28 512 512)"/>
+  <ellipse cx="512" cy="512" rx="92" ry="210" fill="none" stroke="#06b6d4" stroke-width="5" stroke-opacity="0.38" transform="rotate(28 512 512)"/>
+
+  <!-- Noctis Eclipse Crescent -->
+  <path d="M555 342 A175 175 0 1 0 676 614 A142 142 0 1 1 555 342 Z"
+        fill="url(#crescentGrad)"/>
+
+  <!-- Cyber Node Core -->
+  <circle cx="546" cy="488" r="24" fill="#22d3ee"/>
+  <circle cx="546" cy="488" r="10" fill="#ffffff"/>
+
+  <!-- Network Relay Nodes -->
+  <circle cx="512" cy="302" r="11" fill="#a855f7"/>
+  <circle cx="722" cy="512" r="11" fill="#22d3ee"/>
+  <circle cx="302" cy="512" r="11" fill="#a855f7"/>
+  <circle cx="512" cy="722" r="11" fill="#22d3ee"/>
+</svg>

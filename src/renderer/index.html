@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NoctisBrowser</title>
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/cockpit.css">
+</head>
+<body>
+
+  <!-- Top Browser Chrome -->
+  <header class="browser-chrome">
+    <!-- Tabs Strip -->
+    <div class="tabs-strip">
+      <div class="brand-pill" title="NoctisBrowser — Zero-Trace Dark Web & Privacy Browser">
+        <img src="../../assets/icon.svg" alt="Noctis" class="brand-pill-icon" />
+        <span class="brand-pill-name">Noctis</span>
+      </div>
+      <div class="tab-list" id="tab-list">
+        <!-- Dynamic browser tabs inserted here -->
+      </div>
+      <button class="btn-new-tab" id="btn-new-tab" title="New Tab">+</button>
+      <div class="pinned-tabs-group">
+        <button class="btn-pinned-tab btn-tor-tab" id="btn-tor-tab" title="Open Tor, Dark Web & Browser VPN Controls">
+          <span class="btn-dot dot-green" id="tor-tab-dot"></span>
+          <span id="tor-tab-label">Tor &amp; VPN</span>
+        </button>
+        <button class="btn-pinned-tab btn-matrix-tab" id="btn-matrix-tab" title="Open Network Monitor">
+          <span class="btn-dot dot-cyan"></span> Network Monitor
+        </button>
+        <button class="btn-pinned-tab btn-vault-tab" id="btn-vault-tab" title="Open Privacy Vault">
+          <span class="btn-dot dot-purple"></span> Privacy Vault
+        </button>
+      </div>
+    </div>
+
+    <!-- Navigation & Address Toolbar -->
+    <div class="browser-toolbar">
+      <div class="nav-controls">
+        <button class="nav-btn" id="nav-back" title="Back" disabled>‹</button>
+        <button class="nav-btn" id="nav-forward" title="Forward" disabled>›</button>
+        <button class="nav-btn" id="nav-reload" title="Reload">⟳</button>
+        <button class="nav-btn" id="nav-home" title="Home">Home</button>
+      </div>
+
+      <div class="address-bar-container">
+        <span class="address-lock-icon" id="address-protocol-badge" title="Secure Ephemeral Connection">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+          </svg>
+        </span>
+        <input type="text" class="address-bar" id="address-bar" placeholder="Enter URL, .onion / .i2p / .loki / ipfs:// address, or search..." spellcheck="false" autocomplete="off" />
+      </div>
+
+      <div class="toolbar-actions">
+        <!-- Active Routing / Browser VPN Pill -->
+        <button class="vpn-status-pill" id="btn-vpn-status" title="Click to toggle Built-in Browser VPN or configure Tor / Dark Web routing">
+          <span class="btn-dot" id="vpn-pill-dot"></span>
+          <span id="vpn-pill-text">Direct</span>
+        </button>
+
+        <!-- Zero-Trace Mode Indicator -->
+        <div class="ephemeral-badge" title="Zero-Trace Session: All cache/storage is strictly in-memory and any temp space is wiped unconditionally on exit">
+          <span class="btn-dot green"></span> Zero-Trace
+        </div>
+
+        <!-- Instant Panic / Burn Identity Button -->
+        <button class="btn-burn-identity" id="btn-burn-identity" title="Panic / Burn Identity: Instantly wipe ephemeral storage, rotate fingerprint persona &amp; circuit, and reset tabs">
+          Burn Identity
+        </button>
+
+        <!-- Live Traffic Ticker Pill -->
+        <div class="live-metrics-pill" title="Live Network Monitor">
+          <div class="metric-item">
+            <span class="metric-dot pulse"></span>
+            <span class="metric-val" id="metric-reqs">0</span> reqs
+          </div>
+          <div class="metric-item">
+            <span class="metric-val" id="metric-bytes">0 B</span>
+          </div>
+          <div class="metric-item blocked" title="Blocked requests">
+            <span class="metric-val" id="metric-blocked">0</span> blkd
+          </div>
+          <div class="metric-item paused" title="Paused requests">
+            <span class="metric-val" id="metric-paused">0</span> hold
+          </div>
+        </div>
+
+        <!-- Global Intercept Pause Switch -->
+        <button class="btn-pause-traffic" id="btn-pause-traffic" title="Toggle traffic pause and inspection breakpoints">
+          <span class="btn-dot amber"></span> Pause Traffic
+        </button>
+
+        <!-- Toggle Cockpit Drawer (starts collapsed) -->
+        <button class="btn-toggle-cockpit" id="btn-toggle-cockpit" title="Toggle Network Cockpit Pane">
+          Cockpit
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Browser Workspace Body (Split-View) -->
+  <main class="browser-body">
+    <!-- Active Tab Webview Area -->
+    <section class="webview-container" id="webview-container">
+      <!-- Webviews are dynamically injected here -->
+    </section>
+
+    <!-- Draggable Resizer Splitter -->
+    <div class="split-resizer" id="split-resizer" title="Drag to resize, double-click to collapse"></div>
+
+    <!-- The Network Cockpit Pane (Starts Collapsed by Default) -->
+    <aside class="network-cockpit collapsed" id="network-cockpit">
+      <!-- Cockpit Header -->
+      <div class="cockpit-header">
+        <div class="cockpit-title-row">
+          <div class="cockpit-title">
+            <span>Noctis Cockpit</span>
+            <span class="cockpit-badge">Live CDP</span>
+          </div>
+          <div class="cockpit-top-actions">
+            <button class="icon-btn" id="btn-cockpit-clear" title="Clear Network History">Clear</button>
+            <button class="btn-open-matrix" id="btn-cockpit-har" title="Export as HTTP Archive (HAR)">
+              Export HAR
+            </button>
+          </div>
+        </div>
+
+        <!-- Search & Filter Bar -->
+        <div class="cockpit-filter-row">
+          <div class="filter-input-wrap">
+            <input type="text" class="filter-input" id="cockpit-filter-input" placeholder="Filter requests, hosts, paths..." spellcheck="false" />
+          </div>
+        </div>
+
+        <!-- Resource Type Chips -->
+        <div class="type-chips-row">
+          <div class="type-chip active" data-type="ALL">All</div>
+          <div class="type-chip" data-type="FETCH">Fetch/XHR</div>
+          <div class="type-chip" data-type="DOC">Doc</div>
+          <div class="type-chip" data-type="JS">JS</div>
+          <div class="type-chip" data-type="CSS">CSS</div>
+          <div class="type-chip" data-type="IMG">Img</div>
+          <div class="type-chip blocked-chip" data-type="BLOCKED">Blocked</div>
+          <div class="type-chip paused-chip" data-type="PAUSED">Paused</div>
+        </div>
+      </div>
+
+      <!-- Cockpit Navigation Tabs -->
+      <nav class="cockpit-tabs-nav">
+        <button class="cockpit-tab-btn active" data-view="stream">
+          <span>Live Feed</span>
+        </button>
+        <button class="cockpit-tab-btn" data-view="destinations">
+          <span>By Destination</span>
+        </button>
+        <button class="cockpit-tab-btn" data-view="sources">
+          <span>By Source</span>
+        </button>
+        <button class="cockpit-tab-btn" data-view="intercept">
+          <span>Intercept</span>
+          <span class="cockpit-tab-badge" id="paused-tab-badge">0</span>
+        </button>
+        <button class="cockpit-tab-btn" data-view="firewall">
+          <span>Shield &amp; Firewall</span>
+        </button>
+        <button class="cockpit-tab-btn" data-view="routing">
+          <span>Data Path</span>
+        </button>
+      </nav>
+
+      <!-- Cockpit Body Views -->
+      <div class="cockpit-body">
+        <!-- View 1: Live Stream Table -->
+        <div class="cockpit-view active" id="view-stream">
+          <table class="stream-table">
+            <thead>
+              <tr>
+                <th style="width: 48px;">Status</th>
+                <th style="width: 48px;">Method</th>
+                <th>Request &amp; Host</th>
+                <th style="width: 60px;">Type</th>
+                <th style="width: 60px; text-align: right;">Size</th>
+                <th style="width: 50px; text-align: right;">Time</th>
+              </tr>
+            </thead>
+            <tbody id="stream-table-body">
+              <!-- Live request rows -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- View 2: Destination Tree (Grouped by Domain) -->
+        <div class="cockpit-view" id="view-destinations">
+          <div class="group-tree-container" id="destinations-list">
+            <!-- Grouped destination cards -->
+          </div>
+        </div>
+
+        <!-- View 3: Source Tree (Grouped by Initiator Script) -->
+        <div class="cockpit-view" id="view-sources">
+          <div class="group-tree-container" id="sources-list">
+            <!-- Grouped source cards -->
+          </div>
+        </div>
+
+        <!-- View 4: Intercept Queue -->
+        <div class="cockpit-view" id="view-intercept">
+          <div class="intercept-container">
+            <div class="intercept-alert-bar">
+              <div class="intercept-alert-text">
+                <span>Hold</span> Intercept Breakpoints Active
+              </div>
+              <button class="btn-resume-all" id="btn-resume-all-paused">Resume All</button>
+            </div>
+            <div id="intercept-list" style="display: flex; flex-direction: column; gap: 8px;">
+              <!-- Paused cards -->
+            </div>
+          </div>
+        </div>
+
+        <!-- View 5: Firewall & Rules -->
+        <div class="cockpit-view" id="view-firewall">
+          <div class="firewall-container">
+            <!-- Deny-by-Default Ad & Tracker Shield Card -->
+            <div class="privacy-shield-card">
+              <div class="shield-card-header">
+                <div class="shield-card-title">
+                  <span>Deny-by-Default Ad &amp; Tracker Shield</span>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="toggle-deny-trackers" checked />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="shield-card-body">
+                <div class="shield-meta-row">
+                  <span>Ad Networks &amp; Delivery:</span>
+                  <span style="color: var(--accent-green); font-weight: 600;">BLOCKED BY DEFAULT</span>
+                </div>
+                <div class="shield-meta-row">
+                  <span>Sponsored &amp; Native Feeds:</span>
+                  <span style="color: var(--accent-green); font-weight: 600;">BLOCKED BY DEFAULT</span>
+                </div>
+                <div class="shield-meta-row">
+                  <span>Telemetry &amp; User Recorders:</span>
+                  <span style="color: var(--accent-green); font-weight: 600;">BLOCKED BY DEFAULT</span>
+                </div>
+                <div class="shield-meta-row">
+                  <span>Ad &amp; Tracker Probes Blocked:</span>
+                  <span class="rule-hits-badge" id="shield-blocked-count" style="font-size: 11px; padding: 2px 8px;">0 blocked</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Opt-In Community Blocklist Feeds Card -->
+            <div class="privacy-shield-card" style="border-color: rgba(99, 102, 241, 0.35);">
+              <div class="shield-card-header">
+                <div class="shield-card-title">
+                  <span>Community Filter Feeds (Opt-In)</span>
+                </div>
+                <span class="feed-badge-pill" id="feed-active-badge">Pre-loaded</span>
+              </div>
+              <div class="shield-card-body">
+                <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4; margin-bottom: 4px;">
+                  NoctisBrowser never pings external servers automatically. Opt-in below to fetch fresh community blocklist feeds into ephemeral memory.
+                </div>
+                <div class="shield-meta-row">
+                  <span>Active List:</span>
+                  <span style="color: var(--accent-blue); font-family: var(--font-mono); font-size: 11px;" id="feed-active-name">Built-in Ad &amp; Tracker Shield</span>
+                </div>
+                <div class="shield-meta-row">
+                  <span>Protected Hosts in RAM:</span>
+                  <span style="color: var(--text-main); font-family: var(--font-mono); font-size: 11px;" id="feed-domains-count">80+ Core Networks</span>
+                </div>
+
+                <!-- Feed Selector & Trigger -->
+                <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">
+                  <label style="font-size: 11px; font-weight: 600; color: var(--text-muted);">Select Community Feed:</label>
+                  <select id="select-blocklist-feed" class="feed-select">
+                    <option value="peter_lowe" selected>Peter Lowe's Adservers (pgl.yoyo.org) - Recommended</option>
+                    <option value="steven_black">StevenBlack Unified Hosts (~60,000 domains)</option>
+                    <option value="adguard_dns">AdGuard DNS Filter (~40,000 domains)</option>
+                    <option value="custom">Custom Feed URL...</option>
+                  </select>
+
+                  <input type="text" id="input-custom-feed-url" class="input-feed-url" placeholder="https://example.com/hosts.txt" style="display: none;" />
+
+                  <div style="display: flex; gap: 6px; margin-top: 4px;">
+                    <button class="btn-fetch-feed" id="btn-fetch-feed" style="flex: 1;">
+                      <span id="btn-fetch-text">Update Blocklist (Opt-In)</span>
+                    </button>
+                    <button class="btn-reset-feed" id="btn-reset-feed" title="Revert to built-in clean list">
+                      Reset
+                    </button>
+                  </div>
+                  <div id="feed-feedback-msg" class="feed-feedback-msg" style="display: none;"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Anti-Fingerprint Masking Status Card -->
+            <div class="privacy-shield-card">
+              <div class="shield-card-header">
+                <div class="shield-card-title">
+                  <span>Paranoid Anti-Fingerprinting Shield</span>
+                </div>
+                <span class="shield-badge-active">ACTIVE</span>
+              </div>
+              <div class="shield-card-body">
+                <div class="shield-meta-row">
+                  <span>Canvas / WebGL / Audio / WebGPU:</span>
+                  <span style="color: var(--accent-cyan); font-family: var(--font-mono); font-size: 11px;">Randomized Micro-Jitter</span>
+                </div>
+                <div class="shield-meta-row">
+                  <span>Viewport Letterboxing:</span>
+                  <span style="color: var(--accent-blue); font-family: var(--font-mono); font-size: 11px;">200x100 Bucket Quantized</span>
+                </div>
+                <div class="shield-meta-row">
+                  <span>Sensors / Gamepad / Storage Quota:</span>
+                  <span style="color: var(--text-muted); font-family: var(--font-mono); font-size: 11px;">Neutralized (10GB Uniform)</span>
+                </div>
+                <div class="shield-meta-row">
+                  <span>WebRTC &amp; DoH Tunnel Protection:</span>
+                  <span style="color: var(--accent-green); font-family: var(--font-mono); font-size: 11px;">Non-Proxied UDP Disabled</span>
+                </div>
+
+                <button class="btn-open-vault" id="btn-cockpit-open-vault" style="width: 100%; margin-top: 10px; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.3); color: #d8b4fe; border-radius: 6px; padding: 6px 10px; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.15s ease;">
+                  Open Privacy Vault &amp; Tor/VPN ↗
+                </button>
+              </div>
+            </div>
+
+            <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); margin-top: 4px;">Custom Firewall Rules</div>
+            <div class="firewall-add-bar">
+              <input type="text" class="input-add-rule" id="input-add-rule" placeholder="Add domain to block (e.g. *adservice*)" />
+              <button class="btn-add-rule" id="btn-add-rule">+ Block Pattern</button>
+            </div>
+            <div class="rules-list" id="firewall-rules-list">
+              <!-- Active rules -->
+            </div>
+          </div>
+        </div>
+
+        <!-- View 6: Data Path & Routing Validator -->
+        <div class="cockpit-view" id="view-routing">
+          <div class="routing-container" style="padding: 12px; display: flex; flex-direction: column; gap: 12px;">
+            <div class="privacy-shield-card">
+              <div class="shield-card-header">
+                <div class="shield-card-title">
+                  <span>Routing Configuration &amp; Telemetry</span>
+                </div>
+                <button class="btn-open-matrix" id="btn-cockpit-open-matrix" style="font-size: 10.5px; padding: 2px 8px;">
+                  Full Monitor ↗
+                </button>
+              </div>
+              <div class="shield-card-body">
+                <div class="shield-meta-row">
+                  <span>Mode:</span>
+                  <span id="cockpit-route-mode" style="font-family: var(--font-mono); font-weight: 600; color: var(--accent-green);">Direct</span>
+                </div>
+                <div class="shield-meta-row">
+                  <span>Relay / Transport:</span>
+                  <span id="cockpit-route-relay" style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-cyan);">Direct Socket</span>
+                </div>
+                <div class="shield-meta-row">
+                  <span>DoH &amp; DNSSEC:</span>
+                  <span id="cockpit-route-dnssec" style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-cyan);">Active (Cloudflare)</span>
+                </div>
+                <div class="shield-meta-row">
+                  <span>Require HTTPS:</span>
+                  <span id="cockpit-route-https" style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-green);">Enforced (No Plaintext)</span>
+                </div>
+                <div class="shield-meta-row">
+                  <span>Masked Exit IP:</span>
+                  <span id="cockpit-route-exit-ip" style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-purple);">Protected</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Path Diagnostic Runner -->
+            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+              <div style="font-size: 11.5px; font-weight: 700; color: var(--text-main);">Test &amp; Validate Data Path</div>
+              <div style="display: flex; gap: 6px;">
+                <input type="text" id="cockpit-test-url" value="https://example.com" placeholder="https://example.com" style="flex: 1; background: var(--bg-card); border: 1px solid var(--border-muted); color: var(--text-main); padding: 6px 10px; border-radius: 6px; font-size: 11px; font-family: var(--font-mono); outline: none;" />
+                <button id="btn-cockpit-test-path" style="background: var(--accent-cyan); color: #000; border: none; border-radius: 6px; padding: 6px 12px; font-size: 11px; font-weight: 700; cursor: pointer;">Test</button>
+              </div>
+              <div id="cockpit-hops-display" style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px;">
+                <!-- Hops rendered dynamically -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Inspector Drawer -->
+        <div class="inspector-drawer hidden" id="inspector-drawer">
+          <div class="inspector-header">
+            <div class="inspector-summary" id="inspector-summary">
+              <!-- Selected request summary -->
+            </div>
+            <button class="icon-btn" id="btn-close-inspector" title="Close Inspector">×</button>
+          </div>
+
+          <div class="inspector-tabs-nav">
+            <button class="inspector-tab-btn active" data-itab="headers">Headers</button>
+            <button class="inspector-tab-btn" data-itab="payload">Payload</button>
+            <button class="inspector-tab-btn" data-itab="response">Response</button>
+            <button class="inspector-tab-btn" data-itab="timing">Timing</button>
+          </div>
+
+          <div class="inspector-body">
+            <div id="inspector-tab-headers"></div>
+            <div id="inspector-tab-payload" style="display: none;"></div>
+            <div id="inspector-tab-response" style="display: none;"></div>
+            <div id="inspector-tab-timing" style="display: none;"></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Scripts -->
+  <script src="js/jsonViewer.js"></script>
+  <script src="js/cockpit.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
