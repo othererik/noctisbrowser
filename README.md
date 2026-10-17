@@ -308,8 +308,9 @@ npm install
 
 # 3. Start NoctisBrowser
 npm start
-# Or use the zero-admin POSIX launcher on macOS / Linux:
-./start.sh
+# Or use the zero-admin OS launchers directly:
+./start.sh      # macOS & Linux
+start.bat       # Windows (Command Prompt / PowerShell / Double-Click)
 ```
 
 > **Note for Linux Users (Fedora, Ubuntu, Debian, Arch)**: NoctisBrowser automatically appends `--no-sandbox` and `--disable-setuid-sandbox` via [`scripts/run_electron.js`](scripts/run_electron.js) on Linux when running as a portable/user-space app so no `root`-owned `chrome-sandbox` SUID binary is needed.
@@ -404,5 +405,6 @@ noctisbrowser/
 │   └── renderer/                 # Browser UI, Network Cockpit, Privacy Vault & Guest Webview Shield
 ├── test/                         # Automated Unit, Exhaustive Routing & Headless Electron E2E Suites
 ├── package.json
+├── start.bat                     # Zero-Admin Windows launcher
 └── start.sh                      # Zero-Admin POSIX launcher for macOS & Linux
 ```
