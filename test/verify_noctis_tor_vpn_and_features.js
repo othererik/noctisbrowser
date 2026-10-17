@@ -15,6 +15,10 @@ const testEphemeralDir = path.join(os.tmpdir(), `noctis-test-features-${Date.now
 fs.mkdirSync(testEphemeralDir, { recursive: true });
 app.setPath('userData', testEphemeralDir);
 app.setPath('sessionData', testEphemeralDir);
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('no-sandbox');
+  app.commandLine.appendSwitch('disable-setuid-sandbox');
+}
 app.commandLine.appendSwitch('disable-http-cache');
 app.commandLine.appendSwitch('disk-cache-size', '0');
 app.commandLine.appendSwitch('incognito');
@@ -84,7 +88,7 @@ async function runTests() {
   // 3. Verify Built-in Browser VPN Local Encrypted Tunnel & Circuit Rotation
   console.log('3. Verifying Built-in Browser VPN tunnel, PAC generation, Kill-Switch, and Circuit Rotation...');
   const sessions = [session.defaultSession, session.fromPartition('in-memory-ephemeral')];
-  const initStatus = await torVpnManager.initialize('/tmp', sessions);
+  const initStatus = await torVpnManager.initialize(testEphemeralDir, sessions);
   assert(initStatus.tunnelPort > 0, 'Local encrypted VPN tunnel port should be bound');
 
   // Spin up a local echo target server to test routing through the Noctis VPN tunnel
@@ -189,7 +193,7 @@ async function runTests() {
     return { success: true, profile, torVpn };
   });
   ipcMain.handle('privacy:get-storage-info', () => ({
-    ephemeralDirPath: '/tmp/noctis-test',
+    ephemeralDirPath: testEphemeralDir,
     totalSizeBytes: 1024,
     totalFilesCount: 1,
     categories: {},

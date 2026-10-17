@@ -3,12 +3,17 @@
 const assert = require('assert');
 const http = require('http');
 const net = require('net');
+const os = require('os');
+const path = require('path');
+const fs = require('fs');
 const torVpnManager = require('../src/main/torVpnManager');
 const privacyEngine = require('../src/main/privacyEngine');
 
 console.log('=== Exhaustive Network States, Data Path Diagnostic & Keyboard Shortcut Verification ===\n');
 
 async function runExhaustiveTests() {
+  const testDir = path.join(os.tmpdir(), `noctis-test-exhaustive-${Date.now()}`);
+  fs.mkdirSync(testDir, { recursive: true });
   // Mock Electron sessions
   const mockProxyCalls = [];
   const mockSession = {
@@ -33,7 +38,7 @@ async function runExhaustiveTests() {
 
   // 1. Initialize TorVpnManager with ephemeral test directory
   console.log('1. Testing TorVpnManager Initialization & Tunnel Startup...');
-  const initStatus = await torVpnManager.initialize('/tmp/noctis-test-exhaustive', [mockSession]);
+  const initStatus = await torVpnManager.initialize(testDir, [mockSession]);
   assert.ok(initStatus, 'Initialization status should return an object');
   assert.ok(torVpnManager.tunnelPort > 0, 'Local VPN tunnel port should be allocated');
   console.log(`   ✔ Local VPN tunnel server active on port ${torVpnManager.tunnelPort}`);
@@ -236,6 +241,7 @@ async function runExhaustiveTests() {
 
   // Teardown
   torVpnManager.shutdown();
+  try { fs.rmSync(testDir, { recursive: true, force: true }); } catch (_) {}
   console.log('\n🎉 ALL EXHAUSTIVE NETWORK STATE & FEATURE TESTS PASSED SUCCESSFULLY!');
 }
 

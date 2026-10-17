@@ -20,12 +20,17 @@ const initialDirs = getNetscopeDirs();
 console.log(`   Found ${initialDirs.length} pre-existing ephemeral directories.`);
 
 console.log('2. Spawning NoctisBrowser process (headless)...');
-const child = spawn(electronBin, ['.'], {
+const spawnArgs = ['.'];
+if (process.platform === 'linux') {
+  spawnArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+}
+const nodeDir = path.dirname(process.execPath);
+const child = spawn(electronBin, spawnArgs, {
   cwd: projectRoot,
   env: {
     ...process.env,
     NOCTIS_HEADLESS: '1',
-    PATH: `/Users/home/.local/opt/node-v20.18.0-darwin-x64/bin:${process.env.PATH}`
+    PATH: process.env.PATH ? `${nodeDir}${path.delimiter}${process.env.PATH}` : nodeDir
   }
 });
 

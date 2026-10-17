@@ -12,6 +12,10 @@ fs.mkdirSync(testDir, { recursive: true });
 app.setPath('userData', testDir);
 app.setPath('sessionData', testDir);
 
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('no-sandbox');
+  app.commandLine.appendSwitch('disable-setuid-sandbox');
+}
 app.commandLine.appendSwitch('disable-http-cache');
 app.commandLine.appendSwitch('incognito');
 app.commandLine.appendSwitch('enable-features', 'DnsOverHttps');
