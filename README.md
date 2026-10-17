@@ -145,12 +145,11 @@ npm test
 ## CI/CD & Pull Request Gates
 
 GitHub Actions automatically runs on every push to `main`/`release/**` and acts as a **Pull Request Gate** via [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
-1. **Cross-Platform Matrix Gate (`ubuntu-latest`, `macos-latest`, `windows-latest`)**:
-   - Scans source, test, and build scripts to enforce **zero hardcoded personal or system paths**.
+1. **Unit & Portable Build Matrix Gate (`ubuntu-latest`, `macos-latest`, `windows-latest`)**:
    - Runs `npm run test:unit` across Linux, macOS, and Windows runners.
-   - Runs `npm run dist:portable` to verify portable bundle packaging on every OS.
-2. **Electron Headless E2E Gate (`macos-latest`, `ubuntu-latest` with `xvfb-run`)**:
-   - Runs `npm run test:e2e` to validate live Chromium guest webviews, anti-fingerprinting shields, and ephemeral session cleanup.
+   - Runs `npm run dist:portable` to verify zero-admin portable bundle packaging on every OS.
+2. **Electron Headless E2E Matrix Gate (`ubuntu-latest`, `macos-latest`, `windows-latest`)**:
+   - Runs `npm run test:e2e` across Linux (via `xvfb-run`), macOS, and Windows to validate live Chromium guest webviews, anti-fingerprinting shields, and ephemeral session cleanup.
 
 ---
 

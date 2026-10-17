@@ -148,6 +148,15 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
+if (process.env.NOCTIS_HEADLESS === '1' && process.stdin) {
+  process.stdin.on('data', (chunk) => {
+    if (String(chunk).includes('QUIT')) {
+      cleanupEphemeralData();
+      process.exit(0);
+    }
+  });
+}
+
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
   cleanupEphemeralData();

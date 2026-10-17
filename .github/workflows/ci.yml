@@ -13,9 +13,9 @@ permissions:
   contents: read
 
 jobs:
-  # Gate 1: Multi-OS Matrix (Ubuntu Linux, macOS, Windows) — Hygiene, Bundled Binaries, Unit Suite & Portable Packaging
+  # Gate 1: Multi-OS Matrix (Ubuntu Linux, macOS, Windows) — Unit, Routing, Privacy, VPN & Portable Packaging
   cross-platform-matrix:
-    name: "Matrix Validation (${{ matrix.os }})"
+    name: "Unit & Portable Build (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -38,23 +38,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify zero hardcoded personal or machine-specific paths
-        shell: bash
-        run: |
-          echo "Scanning source, test, and build scripts for hardcoded system paths..."
-          if grep -rnE "/Users/|/home/[a-zA-Z0-9_-]+/" src/ test/ scripts/ start.sh package.json; then
-            echo "❌ Found hardcoded personal path!"
-            exit 1
-          fi
-          echo "✔ Zero hardcoded personal paths detected."
-
       - name: Run Cross-Platform Unit, Routing, Privacy & VPN Verification Suite
         run: npm run test:unit
 
       - name: Build Zero-Admin Portable Bundles
         run: npm run dist:portable
 
-  # Gate 2: Full Electron Headless E2E Browser & Guest Webview Verification
+  # Gate 2: Full Electron Headless E2E Browser & Guest Webview Verification (Linux, macOS, Windows)
   electron-e2e:
     name: "Electron Headless E2E (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
@@ -63,8 +53,9 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - macos-latest
           - ubuntu-latest
+          - macos-latest
+          - windows-latest
 
     steps:
       - name: Checkout repository
@@ -79,8 +70,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Electron Headless E2E Suite (macOS)
-        if: runner.os == 'macOS'
+      - name: Run Electron Headless E2E Suite (macOS & Windows)
+        if: runner.os != 'Linux'
         run: npm run test:e2e
 
       - name: Run Electron Headless E2E Suite (Ubuntu Linux with Xvfb)

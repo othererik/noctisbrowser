@@ -50,9 +50,16 @@ setTimeout(() => {
   assert(fs.existsSync(fullPath), 'Ephemeral directory should exist during runtime');
 
   console.log('3. Terminating browser process (SIGTERM) to trigger exit cleanup...');
-  child.kill('SIGTERM');
+  try {
+    if (child.stdin && !child.stdin.destroyed) {
+      child.stdin.write('QUIT\n');
+    }
+  } catch (_) {}
+  setTimeout(() => {
+    try { child.kill('SIGTERM'); } catch (_) {}
+  }, 300);
 
-  // Wait 2 seconds for cleanup to finish
+  // Wait 2.5 seconds for cleanup to finish
   setTimeout(() => {
     console.log('4. Verifying disk cleanup...');
     const existsAfterKill = fs.existsSync(fullPath);
@@ -61,6 +68,6 @@ setTimeout(() => {
 
     console.log('✅ PASS: Zero-trace ephemeral cleanup verified! No temp files or history persisted.');
     process.exit(0);
-  }, 2000);
+  }, 2500);
 
 }, 4000);
