@@ -322,8 +322,8 @@ class TorVpnManager extends EventEmitter {
         path.join(homedir, 'tor-browser/Browser/TorBrowser/Tor/tor')
       ] : []),
       ...(platformOverride === 'win32' ? [
-        'C:\\Program Files\\Tor Browser\\Browser\\TorBrowser\\Tor\\tor.exe',
-        'C:\\Program Files (x86)\\Tor Browser\\Browser\\TorBrowser\\Tor\\tor.exe',
+        path.win32.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'Tor Browser', 'Browser', 'TorBrowser', 'Tor', 'tor.exe'),
+        path.win32.join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'Tor Browser', 'Browser', 'TorBrowser', 'Tor', 'tor.exe'),
         path.join(homedir, 'Desktop', 'Tor Browser', 'Browser', 'TorBrowser', 'Tor', 'tor.exe'),
         path.join(homedir, 'AppData', 'Local', 'Tor Browser', 'Browser', 'TorBrowser', 'Tor', 'tor.exe')
       ] : [])
@@ -717,6 +717,9 @@ class TorVpnManager extends EventEmitter {
     if (this.directBaselineIp && net.isIP(this.directBaselineIp)) {
       return this.directBaselineIp;
     }
+    if (this._baselineProbePromise) {
+      return this._baselineProbePromise;
+    }
 
     const queryDirect = (urlStr) => new Promise((resolve) => {
       let settled = false;
@@ -748,14 +751,19 @@ class TorVpnManager extends EventEmitter {
       }
     });
 
-    let ip = await queryDirect('https://api.ipify.org');
-    if (!ip) {
-      ip = await queryDirect('https://icanhazip.com');
-    }
-    if (ip && net.isIP(ip)) {
-      this.directBaselineIp = ip;
-    }
-    return this.directBaselineIp;
+    this._baselineProbePromise = (async () => {
+      let ip = await queryDirect('https://api.ipify.org');
+      if (!ip) {
+        ip = await queryDirect('https://icanhazip.com');
+      }
+      if (ip && net.isIP(ip) && !this.directBaselineIp) {
+        this.directBaselineIp = ip;
+      }
+      this._baselineProbePromise = null;
+      return this.directBaselineIp;
+    })();
+
+    return this._baselineProbePromise;
   }
 
   async probeExternalIp() {
@@ -1062,8 +1070,18 @@ class TorVpnManager extends EventEmitter {
     });
   }
 
-  _getUpstreamSocksPort() {
-    if (this.daemons.torSocksPort) {
+  _isLoopbackHost(host) {
+    if (!host) return false;
+    const h = String(host).toLowerCase();
+    return h === '127.0.0.1' || h === 'localhost' || h === '::1' || h === '[::1]';
+  }
+
+  _getUpstreamSocksPort(targetHost = '') {
+    if (this._isLoopbackHost(targetHost)) {
+      return null;
+    }
+    const isOnion = targetHost && String(targetHost).toLowerCase().endsWith('.onion');
+    if ((this.mode === 'built-in-vpn' || this.mode === 'tor' || isOnion) && this.daemons.torSocksPort) {
       return this.daemons.torSocksPort;
     }
     if (this.mode === 'custom-proxy' && this.customProxyRules) {
@@ -1100,10 +1118,11 @@ class TorVpnManager extends EventEmitter {
           }
 
           const resolvedIp = await this.resolveHostViaDoH(targetHost);
-          const upstreamSocksPort = this._getUpstreamSocksPort();
+          const isLoopback = this._isLoopbackHost(targetHost);
+          const upstreamSocksPort = this._getUpstreamSocksPort(targetHost);
 
           // Fail-closed protection: never leak local IP if VPN/Tor is active and upstream relay is down
-          if ((this.mode === 'built-in-vpn' || this.mode === 'tor') && !upstreamSocksPort && !this.allowUnmaskedFallback) {
+          if (!isLoopback && (this.mode === 'built-in-vpn' || this.mode === 'tor') && !upstreamSocksPort && !this.allowUnmaskedFallback) {
             this.metrics.blockedByKillSwitch++;
             clientRes.writeHead(502, { 'Content-Type': 'text/plain' });
             clientRes.end('Noctis Browser VPN Fail-Closed: Upstream anonymizing exit relay is offline. Local IP leak prevented.');
@@ -1169,7 +1188,8 @@ class TorVpnManager extends EventEmitter {
         try {
           // Validate DNSSEC & DoH
           const connectHost = await this.resolveHostViaDoH(rawHost);
-          const upstreamSocksPort = this._getUpstreamSocksPort();
+          const isLoopback = this._isLoopbackHost(rawHost);
+          const upstreamSocksPort = this._getUpstreamSocksPort(rawHost);
 
           if (upstreamSocksPort) {
             // Route through country-pinned SOCKS5 exit relay so origin IP is truly masked
@@ -1205,7 +1225,7 @@ class TorVpnManager extends EventEmitter {
           }
 
           // Fail-closed if VPN or Tor mode is active without an upstream exit relay (unless allowUnmaskedFallback is explicitly set)
-          if ((this.mode === 'built-in-vpn' || this.mode === 'tor') && !this.allowUnmaskedFallback) {
+          if (!isLoopback && (this.mode === 'built-in-vpn' || this.mode === 'tor') && !this.allowUnmaskedFallback) {
             this.metrics.blockedByKillSwitch++;
             try {
               clientSocket.write('HTTP/1.1 502 Bad Gateway\r\n\r\n');

@@ -12,6 +12,10 @@ const testEphemeralDir = path.join(os.tmpdir(), `noctis-test-linux-${Date.now()}
 fs.mkdirSync(testEphemeralDir, { recursive: true });
 app.setPath('userData', testEphemeralDir);
 app.setPath('sessionData', testEphemeralDir);
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('no-sandbox');
+  app.commandLine.appendSwitch('disable-setuid-sandbox');
+}
 app.commandLine.appendSwitch('disable-http-cache');
 app.commandLine.appendSwitch('disk-cache-size', '0');
 app.commandLine.appendSwitch('incognito');

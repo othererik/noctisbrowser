@@ -15,6 +15,10 @@ const testEphemeralDir = path.join(os.tmpdir(), `noctis-test-features-${Date.now
 fs.mkdirSync(testEphemeralDir, { recursive: true });
 app.setPath('userData', testEphemeralDir);
 app.setPath('sessionData', testEphemeralDir);
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('no-sandbox');
+  app.commandLine.appendSwitch('disable-setuid-sandbox');
+}
 app.commandLine.appendSwitch('disable-http-cache');
 app.commandLine.appendSwitch('disk-cache-size', '0');
 app.commandLine.appendSwitch('incognito');
@@ -84,7 +88,7 @@ async function runTests() {
   // 3. Verify Built-in Browser VPN Local Encrypted Tunnel & Circuit Rotation
   console.log('3. Verifying Built-in Browser VPN tunnel, PAC generation, Kill-Switch, and Circuit Rotation...');
   const sessions = [session.defaultSession, session.fromPartition('in-memory-ephemeral')];
-  const initStatus = await torVpnManager.initialize('/tmp', sessions);
+  const initStatus = await torVpnManager.initialize(testEphemeralDir, sessions);
   assert(initStatus.tunnelPort > 0, 'Local encrypted VPN tunnel port should be bound');
 
   // Spin up a local echo target server to test routing through the Noctis VPN tunnel
@@ -189,7 +193,7 @@ async function runTests() {
     return { success: true, profile, torVpn };
   });
   ipcMain.handle('privacy:get-storage-info', () => ({
-    ephemeralDirPath: '/tmp/noctis-test',
+    ephemeralDirPath: testEphemeralDir,
     totalSizeBytes: 1024,
     totalFilesCount: 1,
     categories: {},
@@ -402,6 +406,45 @@ async function runTests() {
             const est = navigator.storage && navigator.storage.estimate ? await navigator.storage.estimate() : null;
             const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
             const kbd = navigator.keyboard && navigator.keyboard.getLayoutMap ? await navigator.keyboard.getLayoutMap() : null;
+
+            // Live WebRTC STUN / ICE / getStats / Dynamic Iframe leak probe
+            const webrtcLeaks = [];
+            let localSdp = '';
+            let statsCandidateCount = 0;
+            let iframeShielded = false;
+            if (window.RTCPeerConnection) {
+              try {
+                const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                pc.createDataChannel('probe');
+                pc.onicecandidate = (e) => {
+                  if (e && e.candidate && e.candidate.candidate) {
+                    webrtcLeaks.push(e.candidate.candidate);
+                  }
+                };
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                await new Promise(r => setTimeout(r, 400));
+                localSdp = pc.localDescription ? pc.localDescription.sdp : '';
+                if (pc.getStats) {
+                  const stats = await pc.getStats();
+                  stats.forEach((v) => {
+                    if (v && (v.type === 'local-candidate' || v.type === 'remote-candidate')) {
+                      statsCandidateCount++;
+                    }
+                  });
+                }
+                pc.close();
+              } catch (_) {}
+
+              try {
+                const ifr = document.createElement('iframe');
+                document.body.appendChild(ifr);
+                const cw = ifr.contentWindow;
+                iframeShielded = Boolean(cw && cw.RTCPeerConnection === window.RTCPeerConnection && cw.navigator.platform === navigator.platform);
+                ifr.remove();
+              } catch (_) {}
+            }
+
             return {
               noctisShield: Boolean(window.__NOCTIS_SHIELD_ACTIVE__),
               innerWidth: window.innerWidth,
@@ -414,7 +457,12 @@ async function runTests() {
               gyroUndefined: window.Gyroscope === undefined,
               kbdQ: kbd ? kbd.get('KeyQ') : null,
               hdrMatch: window.matchMedia('(dynamic-range: high)').matches,
-              p3Match: window.matchMedia('(color-gamut: p3)').matches
+              p3Match: window.matchMedia('(color-gamut: p3)').matches,
+              webrtcLeaksCount: webrtcLeaks.length,
+              sdpHasCandidate: localSdp.includes('a=candidate:'),
+              statsCandidateCount,
+              iframeShielded,
+              tzOffset: new Date().getTimezoneOffset()
             };
           })()
         \`);
@@ -433,8 +481,13 @@ async function runTests() {
   assert.strictEqual(guestChecks.kbdQ, 'q', 'Keyboard layout masked to standardized US QWERTY');
   assert.strictEqual(guestChecks.hdrMatch, false, 'HDR display media query normalized');
   assert.strictEqual(guestChecks.p3Match, false, 'P3 wide gamut display media query normalized');
+  assert.strictEqual(guestChecks.webrtcLeaksCount, 0, 'WebRTC must emit zero ICE candidate IP leaks');
+  assert.strictEqual(guestChecks.sdpHasCandidate, false, 'WebRTC localDescription.sdp must contain zero a=candidate lines');
+  assert.strictEqual(guestChecks.statsCandidateCount, 0, 'WebRTC getStats() must expose zero local/remote candidate IPs');
+  assert.strictEqual(guestChecks.iframeShielded, true, 'Dynamic about:blank iframe contentWindow must be shielded');
+  assert.strictEqual(guestChecks.tzOffset, 0, 'Date.getTimezoneOffset() must match active Linux UTC profile (0)');
 
-  console.log('   ✔ Guest webview Letterboxing, Storage Quota, Sensors, Gamepads, Keyboard & Display defenses verified.');
+  console.log('   ✔ Guest webview Letterboxing, WebRTC STUN/ICE/getStats/Iframe Shield, Timezone, Storage Quota, Sensors & Display verified.');
 
   torVpnManager.shutdown();
   try { fs.rmSync(testEphemeralDir, { recursive: true, force: true }); } catch (_) {}

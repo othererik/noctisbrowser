@@ -8,50 +8,54 @@ const rootDir = path.join(__dirname, '..');
 const distDir = path.join(rootDir, 'dist');
 fs.mkdirSync(distDir, { recursive: true });
 
-// 1. Build standalone macOS bundle (dist/NoctisBrowser.app)
-require('./package_macos.js');
+// 1. Build standalone macOS bundle (dist/NoctisBrowser.app) when running on macOS
+if (process.platform === 'darwin') {
+  require('./package_macos.js');
 
-// 2. Build Zero-Admin macOS Portable Folder (dist/NoctisBrowser-macOS-Portable)
-const macPortableDir = path.join(distDir, 'NoctisBrowser-macOS-Portable');
-if (fs.existsSync(macPortableDir)) {
-  fs.rmSync(macPortableDir, { recursive: true, force: true });
-}
-fs.mkdirSync(macPortableDir, { recursive: true });
+  // 2. Build Zero-Admin macOS Portable Folder (dist/NoctisBrowser-macOS-Portable)
+  const macPortableDir = path.join(distDir, 'NoctisBrowser-macOS-Portable');
+  if (fs.existsSync(macPortableDir)) {
+    fs.rmSync(macPortableDir, { recursive: true, force: true });
+  }
+  fs.mkdirSync(macPortableDir, { recursive: true });
 
-const builtMacApp = path.join(distDir, 'NoctisBrowser.app');
-if (fs.existsSync(builtMacApp)) {
-  console.log('\nCreating macOS Zero-Admin Portable Bundle...');
-  execSync(`ditto "${builtMacApp}" "${path.join(macPortableDir, 'NoctisBrowser.app')}"`);
+  const builtMacApp = path.join(distDir, 'NoctisBrowser.app');
+  if (fs.existsSync(builtMacApp)) {
+    console.log('\nCreating macOS Zero-Admin Portable Bundle...');
+    execSync(`ditto "${builtMacApp}" "${path.join(macPortableDir, 'NoctisBrowser.app')}"`);
 
-  const macLauncherPath = path.join(macPortableDir, 'Launch-NoctisBrowser.command');
-  const macLauncherScript = [
-    '#!/usr/bin/env bash',
-    '# Zero-Admin Portable Launcher for NoctisBrowser (macOS)',
-    'DIR="$(cd "$(dirname "$0")" && pwd)"',
-    'APP="$DIR/NoctisBrowser.app"',
-    '# Strip Gatekeeper quarantine flags in user-space (no admin/sudo required)',
-    'xattr -cr "$APP" 2>/dev/null || true',
-    'chmod +x "$APP/Contents/MacOS/Electron" 2>/dev/null || true',
-    'chmod +x "$APP/Contents/Resources/app/bin/macos/aarch64/tor" 2>/dev/null || true',
-    'chmod +x "$APP/Contents/Resources/app/bin/macos/x86_64/tor" 2>/dev/null || true',
-    'exec "$APP/Contents/MacOS/Electron" "$@"'
-  ].join('\n') + '\n';
-  fs.writeFileSync(macLauncherPath, macLauncherScript, { mode: 0o755 });
-  fs.chmodSync(macLauncherPath, 0o755);
+    const macLauncherPath = path.join(macPortableDir, 'Launch-NoctisBrowser.command');
+    const macLauncherScript = [
+      '#!/usr/bin/env bash',
+      '# Zero-Admin Portable Launcher for NoctisBrowser (macOS)',
+      'DIR="$(cd "$(dirname "$0")" && pwd)"',
+      'APP="$DIR/NoctisBrowser.app"',
+      '# Strip Gatekeeper quarantine flags in user-space (no admin/sudo required)',
+      'xattr -cr "$APP" 2>/dev/null || true',
+      'chmod +x "$APP/Contents/MacOS/Electron" 2>/dev/null || true',
+      'chmod +x "$APP/Contents/Resources/app/bin/macos/aarch64/tor" 2>/dev/null || true',
+      'chmod +x "$APP/Contents/Resources/app/bin/macos/x86_64/tor" 2>/dev/null || true',
+      'exec "$APP/Contents/MacOS/Electron" "$@"'
+    ].join('\n') + '\n';
+    fs.writeFileSync(macLauncherPath, macLauncherScript, { mode: 0o755 });
+    fs.chmodSync(macLauncherPath, 0o755);
 
-  fs.writeFileSync(
-    path.join(macPortableDir, 'README-PORTABLE.txt'),
-    [
-      'NoctisBrowser v1.1 — Zero-Admin Portable Edition (macOS)',
-      '========================================================',
-      '1. No administrator/root privileges or installer required.',
-      '2. Place this folder anywhere (Desktop, Downloads, USB drive).',
-      '3. Double-click "NoctisBrowser.app" or "Launch-NoctisBrowser.command" to start.',
-      '4. All session data is isolated in ephemeral RAM/tmp storage and wiped on exit.'
-    ].join('\n') + '\n',
-    'utf-8'
-  );
-  console.log(`✅ Created macOS Portable folder: ${macPortableDir}`);
+    fs.writeFileSync(
+      path.join(macPortableDir, 'README-PORTABLE.txt'),
+      [
+        'NoctisBrowser v1.1.1 — Zero-Admin Portable Edition (macOS)',
+        '==========================================================',
+        '1. No administrator/root privileges or installer required.',
+        '2. Place this folder anywhere (Desktop, Downloads, USB drive).',
+        '3. Double-click "NoctisBrowser.app" or "Launch-NoctisBrowser.command" to start.',
+        '4. All session data is isolated in ephemeral RAM/tmp storage and wiped on exit.'
+      ].join('\n') + '\n',
+      'utf-8'
+    );
+    console.log(`✅ Created macOS Portable folder: ${macPortableDir}`);
+  }
+} else {
+  console.log(`ℹ Skipping macOS .app ditto bundle on ${process.platform} host.`);
 }
 
 // 3. Build Zero-Admin Linux x86_64 Portable Folder (Fedora / Ubuntu / Debian / Arch)
@@ -66,7 +70,7 @@ fs.mkdirSync(linuxAppDir, { recursive: true });
 for (const item of ['package.json', 'src', 'assets', 'bin', 'README.md']) {
   const srcPath = path.join(rootDir, item);
   if (fs.existsSync(srcPath)) {
-    execSync(`cp -R "${srcPath}" "${path.join(linuxAppDir, item)}"`);
+    fs.cpSync(srcPath, path.join(linuxAppDir, item), { recursive: true });
   }
 }
 
@@ -102,7 +106,7 @@ const linuxLauncherScript = [
   'fi'
 ].join('\n') + '\n';
 fs.writeFileSync(linuxLauncherPath, linuxLauncherScript, { mode: 0o755 });
-fs.chmodSync(linuxLauncherPath, 0o755);
+try { fs.chmodSync(linuxLauncherPath, 0o755); } catch (_) {}
 
 const linuxDesktopFile = [
   '[Desktop Entry]',
@@ -119,8 +123,8 @@ fs.writeFileSync(path.join(linuxPortableDir, 'NoctisBrowser.desktop'), linuxDesk
 fs.writeFileSync(
   path.join(linuxPortableDir, 'README-PORTABLE.txt'),
   [
-    'NoctisBrowser v1.1 — Zero-Admin Portable Edition (Linux x86_64)',
-    '===============================================================',
+    'NoctisBrowser v1.1.1 — Zero-Admin Portable Edition (Linux x86_64)',
+    '=================================================================',
     '1. No root/sudo or chrome-sandbox SUID permissions required.',
     '2. Bundled with native Linux x86_64 Tor daemon + libevent/libssl/libcrypto + GeoIP databases.',
     '3. Run "./launch-noctis-browser.sh" from any directory to start immediately.'
@@ -141,7 +145,7 @@ fs.mkdirSync(winAppDir, { recursive: true });
 for (const item of ['package.json', 'src', 'assets', 'bin', 'README.md']) {
   const srcPath = path.join(rootDir, item);
   if (fs.existsSync(srcPath)) {
-    execSync(`cp -R "${srcPath}" "${path.join(winAppDir, item)}"`);
+    fs.cpSync(srcPath, path.join(winAppDir, item), { recursive: true });
   }
 }
 
@@ -158,6 +162,18 @@ const winLauncherBat = [
   ')'
 ].join('\r\n') + '\r\n';
 fs.writeFileSync(path.join(winPortableDir, 'Launch-NoctisBrowser.bat'), winLauncherBat, 'utf-8');
+
+fs.writeFileSync(
+  path.join(winPortableDir, 'README-PORTABLE.txt'),
+  [
+    'NoctisBrowser v1.1.1 — Zero-Admin Portable Edition (Windows x64)',
+    '================================================================',
+    '1. No administrator privileges or installer required.',
+    '2. Bundled with native Windows x64 Tor daemon (tor.exe) + GeoIP databases.',
+    '3. Double-click "Launch-NoctisBrowser.bat" from any folder to start immediately.'
+  ].join('\r\n') + '\r\n',
+  'utf-8'
+);
 console.log(`✅ Created Windows x64 Portable folder: ${winPortableDir}`);
 
 console.log('\n🎉 All Zero-Admin Portable Distributions Built Successfully!');

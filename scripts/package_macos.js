@@ -30,7 +30,7 @@ fs.mkdirSync(appResourcesDir, { recursive: true });
 for (const item of ['package.json', 'src', 'assets', 'bin', 'README.md']) {
   const srcPath = path.join(rootDir, item);
   if (fs.existsSync(srcPath)) {
-    execSync(`cp -R "${srcPath}" "${path.join(appResourcesDir, item)}"`);
+    fs.cpSync(srcPath, path.join(appResourcesDir, item), { recursive: true });
   }
 }
 

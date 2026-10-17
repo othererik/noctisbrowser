@@ -12,6 +12,10 @@ const networkManager = new NetworkManager();
 const tabManager = new TabManager(networkManager);
 
 // Ephemeral directory
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('no-sandbox');
+  app.commandLine.appendSwitch('disable-setuid-sandbox');
+}
 app.commandLine.appendSwitch('disable-http-cache');
 app.commandLine.appendSwitch('disk-cache-size', '0');
 app.commandLine.appendSwitch('incognito');

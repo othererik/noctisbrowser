@@ -58,6 +58,8 @@ app.commandLine.appendSwitch('disable-component-update');
 app.commandLine.appendSwitch('no-pings');
 app.commandLine.appendSwitch('incognito');
 app.commandLine.appendSwitch('force-webrtc-ip-handling-policy', 'disable_non_proxied_udp');
+app.commandLine.appendSwitch('webrtc-ip-handling-policy', 'disable_non_proxied_udp');
+app.commandLine.appendSwitch('enforce-webrtc-ip-permission-check');
 app.commandLine.appendSwitch('disable-webrtc-multiple-routes');
 
 // Force DNS-over-HTTPS with strict DNSSEC validation across Chromium engine
@@ -91,24 +93,72 @@ function cleanupEphemeralData() {
     // Locked file handles will be cleaned up by the detached reaper below
   }
 
-  // 2. Spawn a detached native background reaper to guarantee deletion once Chromium releases locks
+  // 2. Spawn a detached cross-platform background reaper that retries deletion for up to 3s
+  //    so any files recreated by shutting-down Chromium GPU/NetworkService child processes are wiped.
   try {
-    if (process.platform === 'win32') {
-      const child = require('child_process').spawn(
-        'cmd.exe',
-        ['/c', `ping 127.0.0.1 -n 2 > nul & rmdir /s /q "${ephemeralDirPath}"`],
-        { detached: true, stdio: 'ignore', windowsHide: true }
-      );
-      child.unref();
-    } else {
-      const reaperCmd = `sleep 0.2; rm -rf "${ephemeralDirPath}"`;
-      const child = require('child_process').spawn('sh', ['-c', reaperCmd], {
+    const reaperScript = [
+      'const fs = require("fs");',
+      'const dir = process.argv[1];',
+      'let ticks = 0, goneCount = 0;',
+      'const timer = setInterval(() => {',
+      '  ticks++;',
+      '  try {',
+      '    if (fs.existsSync(dir)) {',
+      '      fs.rmSync(dir, { recursive: true, force: true });',
+      '      goneCount = 0;',
+      '    } else {',
+      '      goneCount++;',
+      '    }',
+      '  } catch (_) {}',
+      '  if ((goneCount >= 4 && ticks >= 6) || ticks >= 18) {',
+      '    clearInterval(timer);',
+      '    process.exit(0);',
+      '  }',
+      '}, 200);'
+    ].join(' ');
+    const child = require('child_process').spawn(
+      process.execPath,
+      ['-e', reaperScript, ephemeralDirPath],
+      {
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      }
+    );
+    child.unref();
+  } catch (_) {}
+
+  if (process.platform !== 'win32') {
+    try {
+      const posixReaper = `for i in 1 2 3 4 5 6 7 8; do rm -rf "${ephemeralDirPath}" 2>/dev/null; sleep 0.25; done`;
+      const shChild = require('child_process').spawn('sh', ['-c', posixReaper], {
         detached: true,
         stdio: 'ignore'
       });
-      child.unref();
+      shChild.unref();
+    } catch (_) {}
+  }
+}
+
+function gracefulHeadlessShutdown() {
+  try {
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.destroy();
     }
   } catch (_) {}
+  cleanupEphemeralData();
+  try {
+    app.quit();
+  } catch (_) {}
+  setTimeout(() => {
+    try {
+      if (fs.existsSync(ephemeralDirPath)) {
+        fs.rmSync(ephemeralDirPath, { recursive: true, force: true });
+      }
+    } catch (_) {}
+    process.exit(0);
+  }, 450);
 }
 
 // Exit and termination hooks
@@ -139,14 +189,21 @@ process.on('exit', () => {
 });
 
 process.on('SIGINT', () => {
-  cleanupEphemeralData();
-  process.exit(0);
+  gracefulHeadlessShutdown();
 });
 
 process.on('SIGTERM', () => {
-  cleanupEphemeralData();
-  process.exit(0);
+  gracefulHeadlessShutdown();
 });
+
+if (process.env.NOCTIS_HEADLESS === '1' && process.stdin) {
+  try { process.stdin.resume(); } catch (_) {}
+  process.stdin.on('data', (chunk) => {
+    if (String(chunk).includes('QUIT')) {
+      gracefulHeadlessShutdown();
+    }
+  });
+}
 
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
@@ -255,8 +312,14 @@ function isNewTabInputEvent(input) {
   return Boolean(hasModifier && !input.alt && !input.shift && input.key && input.key.toLowerCase() === 't');
 }
 
-// Intercept all window opening and shortcut inputs across all webviews and child contexts
+// Intercept all window opening, WebRTC UDP policy, and shortcut inputs across all webviews and child contexts
 app.on('web-contents-created', (event, contents) => {
+  try {
+    if (typeof contents.setWebRTCIPHandlingPolicy === 'function') {
+      contents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
+    }
+  } catch (_) {}
+
   contents.on('before-input-event', (e, input) => {
     if (isNewTabInputEvent(input)) {
       e.preventDefault();
@@ -815,6 +878,17 @@ app.whenReady().then(async () => {
       s.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
     }
 
+    // Deny-by-Default Permission Sandbox: block unsolicited media (prevents WebRTC LAN IP exposure),
+    // geolocation, local-fonts, midi, notifications, hid, usb, serial, and idle-detection.
+    if (typeof s.setPermissionRequestHandler === 'function') {
+      s.setPermissionRequestHandler((_webContents, _permission, callback) => {
+        callback(false);
+      });
+    }
+    if (typeof s.setPermissionCheckHandler === 'function') {
+      s.setPermissionCheckHandler(() => false);
+    }
+
     s.webRequest.onBeforeRequest((details, callback) => {
       try {
         const blockCheck = networkManager.checkBlocked(details.url);
@@ -858,6 +932,15 @@ app.whenReady().then(async () => {
 
   setupDriftTimer();
   createWindow();
+
+  if (process.env.NOCTIS_AUTO_QUIT_MS) {
+    const quitMs = parseInt(process.env.NOCTIS_AUTO_QUIT_MS, 10);
+    if (quitMs > 0) {
+      setTimeout(() => {
+        gracefulHeadlessShutdown();
+      }, quitMs);
+    }
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
