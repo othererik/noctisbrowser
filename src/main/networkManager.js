@@ -673,7 +673,7 @@ class NetworkManager extends EventEmitter {
     return {
       log: {
         version: '1.2',
-        creator: { name: 'NoctisBrowser', version: '1.0.0' },
+        creator: { name: 'NoctisBrowser', version: '1.1.0' },
         pages: [],
         entries
       }

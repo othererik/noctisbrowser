@@ -119,8 +119,23 @@ function updateRoutingConfigDisplay(status) {
   }
 
   if (chipIp) {
-    chipIp.textContent = status.maskedIp ? `Exit IP: ${status.maskedIp}` : 'Exit: Protected Virtual';
-    chipIp.style.display = (status.mode === 'built-in-vpn' || status.mode === 'tor') ? 'inline-flex' : 'none';
+    if (status.mode === 'built-in-vpn' || status.mode === 'tor') {
+      if (status.maskedIp && status.ipMaskVerified !== false) {
+        const originNote = status.directBaselineIp ? ` (Origin ${status.directBaselineIp} Masked)` : '';
+        chipIp.textContent = `Exit IP: ${status.maskedIp}${originNote}`;
+        chipIp.className = 'routing-chip chip-ip active';
+      } else {
+        chipIp.textContent = 'Exit IP: UNMASKED (Relay Offline)';
+        chipIp.className = 'routing-chip chip-ip warning';
+      }
+      chipIp.style.display = 'inline-flex';
+    } else if (status.directBaselineIp) {
+      chipIp.textContent = `Origin IP: ${status.directBaselineIp}`;
+      chipIp.className = 'routing-chip chip-ip';
+      chipIp.style.display = 'inline-flex';
+    } else {
+      chipIp.style.display = 'none';
+    }
   }
 
   if (liveDot) {
@@ -213,7 +228,13 @@ function renderDiagnosticHops(diag) {
     } else if (num === 4) {
       const metaIp = document.getElementById('hop-meta-4-ip');
       if (metaIp && hop.details) {
-        metaIp.textContent = `Exit: ${hop.details.maskedExitIp || 'Protected'}`;
+        if (hop.details.ipMaskVerified && hop.details.maskedExitIp) {
+          metaIp.textContent = `Exit: ${hop.details.maskedExitIp} (Origin Masked)`;
+        } else if (hop.status === 'UNMASKED_IP') {
+          metaIp.textContent = `UNMASKED (${hop.details.directBaselineIp || 'Local IP'})`;
+        } else {
+          metaIp.textContent = `Exit: ${hop.details.maskedExitIp || 'Direct'}`;
+        }
       }
     }
   });

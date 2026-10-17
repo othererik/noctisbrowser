@@ -65,6 +65,13 @@ app.commandLine.appendSwitch('enable-features', 'DnsOverHttps');
 app.commandLine.appendSwitch('dns-over-https-mode', 'automatic');
 app.commandLine.appendSwitch('dns-over-https-templates', 'https://1.1.1.2/dns-query{?dns}');
 
+// Zero-admin portable execution on Linux (Fedora/Ubuntu/Arch):
+// Unpacked portable builds do not have root-owned SUID chrome-sandbox (4755), so enable user-space execution without sudo.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('no-sandbox');
+  app.commandLine.appendSwitch('disable-setuid-sandbox');
+}
+
 // Unconditional exit cleanup function
 let isCleaningUp = false;
 function cleanupEphemeralData() {
@@ -86,12 +93,21 @@ function cleanupEphemeralData() {
 
   // 2. Spawn a detached native background reaper to guarantee deletion once Chromium releases locks
   try {
-    const reaperCmd = `sleep 0.2; rm -rf "${ephemeralDirPath}"`;
-    const child = require('child_process').spawn('sh', ['-c', reaperCmd], {
-      detached: true,
-      stdio: 'ignore'
-    });
-    child.unref();
+    if (process.platform === 'win32') {
+      const child = require('child_process').spawn(
+        'cmd.exe',
+        ['/c', `ping 127.0.0.1 -n 2 > nul & rmdir /s /q "${ephemeralDirPath}"`],
+        { detached: true, stdio: 'ignore', windowsHide: true }
+      );
+      child.unref();
+    } else {
+      const reaperCmd = `sleep 0.2; rm -rf "${ephemeralDirPath}"`;
+      const child = require('child_process').spawn('sh', ['-c', reaperCmd], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+    }
   } catch (_) {}
 }
 

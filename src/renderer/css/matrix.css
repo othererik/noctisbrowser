@@ -404,6 +404,12 @@ body {
   color: var(--accent-purple);
 }
 
+.routing-chip.chip-ip.warning {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: var(--accent-red);
+}
+
 .routing-header-right {
   display: flex;
   align-items: center;
@@ -462,7 +468,8 @@ body {
   border-left: 3px solid var(--accent-green);
 }
 
-.routing-hop-card.state-killswitch_protected {
+.routing-hop-card.state-killswitch_protected,
+.routing-hop-card.state-unmasked_ip {
   border-left: 3px solid var(--accent-red);
 }
 
@@ -515,7 +522,8 @@ body {
   border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
-.hop-status-badge.status-killswitch_protected {
+.hop-status-badge.status-killswitch_protected,
+.hop-status-badge.status-unmasked_ip {
   background: rgba(239, 68, 68, 0.15);
   color: var(--accent-red);
   border: 1px solid rgba(239, 68, 68, 0.3);

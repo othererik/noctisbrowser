@@ -16,6 +16,7 @@ const VPN_EXIT_RELAYS = {
     id: 'ch-zurich',
     name: 'Switzerland (Zurich) — Strict Privacy',
     region: 'CH',
+    countryCode: '{ch}',
     dohEndpoint: 'https://security.cloudflare-dns.com/dns-query',
     dohHost: 'security.cloudflare-dns.com',
     timezone: 'Europe/Zurich',
@@ -25,6 +26,7 @@ const VPN_EXIT_RELAYS = {
     id: 'is-reykjavik',
     name: 'Iceland (Reykjavik) — Zero-Log Sanctuary',
     region: 'IS',
+    countryCode: '{is}',
     dohEndpoint: 'https://cloudflare-dns.com/dns-query',
     dohHost: 'cloudflare-dns.com',
     timezone: 'Atlantic/Reykjavik',
@@ -34,6 +36,7 @@ const VPN_EXIT_RELAYS = {
     id: 'se-stockholm',
     name: 'Sweden (Stockholm) — Mullvad / DoH Core',
     region: 'SE',
+    countryCode: '{se}',
     dohEndpoint: 'https://security.cloudflare-dns.com/dns-query',
     dohHost: 'security.cloudflare-dns.com',
     timezone: 'Europe/Stockholm',
@@ -43,6 +46,7 @@ const VPN_EXIT_RELAYS = {
     id: 'us-newyork',
     name: 'United States (New York) — High Speed',
     region: 'US',
+    countryCode: '{us}',
     dohEndpoint: 'https://cloudflare-dns.com/dns-query',
     dohHost: 'cloudflare-dns.com',
     timezone: 'America/New_York',
@@ -52,6 +56,7 @@ const VPN_EXIT_RELAYS = {
     id: 'de-frankfurt',
     name: 'Germany (Frankfurt) — EU Backbone',
     region: 'DE',
+    countryCode: '{de}',
     dohEndpoint: 'https://security.cloudflare-dns.com/dns-query',
     dohHost: 'security.cloudflare-dns.com',
     timezone: 'Europe/Berlin',
@@ -133,9 +138,9 @@ class TorVpnManager extends EventEmitter {
 
     // Detected Local Daemons State
     this.daemons = {
-      torSocksPort: null,    // 9050 or 9150 if detected
-      torControlPort: null,  // 9051 or 9151 if detected
-      torBinaryPath: null,   // /opt/homebrew/bin/tor etc.
+      torSocksPort: null,    // 9050 or 9150 or 9250 if detected
+      torControlPort: null,  // 9051 or 9151 or 9251 if detected
+      torBinaryPath: null,   // Bundled or system tor binary path
       torManagedPid: null,
       i2pHttpPort: null,     // 4444 if detected
       i2pSocksPort: null,    // 4447 if detected
@@ -166,7 +171,11 @@ class TorVpnManager extends EventEmitter {
     };
 
     this._managedTorProcess = null;
+    this._appliedExitCountry = null;
     this.currentMaskedIp = null;
+    this.directBaselineIp = null;
+    this.ipMaskVerified = false;
+    this.lastUnmaskedIp = null;
   }
 
   _generateCircuitId() {
@@ -180,10 +189,13 @@ class TorVpnManager extends EventEmitter {
     // 1. Start built-in local Noctis VPN tunnel server on 127.0.0.1:0
     await this._startLocalVpnTunnel();
 
-    // 2. Probe local dark-web daemons (Tor 9050/9150, I2P 4444/4447, IPFS 8080, ZeroNet 43110)
+    // 2. Measure unproxied direct baseline IP in background for honest IP masking verification
+    this.probeDirectBaselineIp().catch(() => {});
+
+    // 3. Probe local dark-web daemons (Tor 9050/9150, I2P 4444/4447, IPFS 8080, ZeroNet 43110)
     await this.probeLocalDaemons();
 
-    // 3. Apply initial proxy rules to all sessions
+    // 4. Apply initial proxy rules to all sessions
     await this.applyRoutingToSessions();
 
     return this.getStatus();
@@ -209,38 +221,120 @@ class TorVpnManager extends EventEmitter {
     });
   }
 
-  findTorBinary() {
-    const isArm = process.arch === 'arm64';
+  /**
+   * Build platform-aware environment variables for spawning the bundled Tor binary.
+   * - Linux (Fedora/Ubuntu/Debian/Arch): sets LD_LIBRARY_PATH so ld-linux.so finds bundled libevent/libssl/libcrypto
+   * - macOS: sets DYLD_LIBRARY_PATH and DYLD_FALLBACK_LIBRARY_PATH
+   * - Windows: prepends binary directory to PATH so DLLs resolve
+   */
+  buildTorSpawnEnv(binPath, platformOverride = process.platform) {
+    const binDir = platformOverride === 'win32' && String(binPath).includes('\\')
+      ? path.win32.dirname(binPath)
+      : path.dirname(binPath);
+    const env = { ...process.env };
+    if (platformOverride === 'linux') {
+      env.LD_LIBRARY_PATH = env.LD_LIBRARY_PATH ? `${binDir}:${env.LD_LIBRARY_PATH}` : binDir;
+    } else if (platformOverride === 'darwin') {
+      env.DYLD_LIBRARY_PATH = env.DYLD_LIBRARY_PATH ? `${binDir}:${env.DYLD_LIBRARY_PATH}` : binDir;
+      env.DYLD_FALLBACK_LIBRARY_PATH = env.DYLD_FALLBACK_LIBRARY_PATH ? `${binDir}:${env.DYLD_FALLBACK_LIBRARY_PATH}` : binDir;
+    } else if (platformOverride === 'win32') {
+      env.PATH = env.PATH ? `${binDir};${env.PATH}` : binDir;
+    }
+    return env;
+  }
+
+  /**
+   * Locate GeoIP and GeoIPv6 databases required for country-pinned VPN exit node selection.
+   */
+  getGeoIpPaths() {
     const homedir = os.homedir();
+    const execDir = process.execPath ? path.dirname(process.execPath) : '';
+    const candidateDirs = [
+      path.join(__dirname, '../../bin/geoip'),
+      path.join(process.resourcesPath || '', 'app/bin/geoip'),
+      path.join(process.resourcesPath || '', 'bin/geoip'),
+      path.join(execDir, 'bin/geoip'),
+      path.join(execDir, 'resources/app/bin/geoip'),
+      path.join(homedir, '.noctis-browser/tor/data'),
+      '/usr/share/tor',
+      '/usr/local/share/tor',
+      '/opt/homebrew/share/tor'
+    ];
+
+    let geoipPath = null;
+    let geoip6Path = null;
+    for (const dir of candidateDirs) {
+      if (!dir) continue;
+      const g4 = path.join(dir, 'geoip');
+      const g6 = path.join(dir, 'geoip6');
+      try {
+        if (!geoipPath && fs.existsSync(g4)) geoipPath = g4;
+        if (!geoip6Path && fs.existsSync(g6)) geoip6Path = g6;
+      } catch (_) {}
+      if (geoipPath && geoip6Path) break;
+    }
+    return { geoipPath, geoip6Path };
+  }
+
+  /**
+   * Cross-platform Tor binary resolver supporting macOS (darwin), Linux (Fedora/Debian/Arch), and Windows (win32),
+   * including portable zero-admin directories.
+   */
+  findTorBinary(platformOverride = process.platform, archOverride = process.arch) {
+    const isArm = archOverride === 'arm64';
+    const archDir = isArm ? 'aarch64' : 'x86_64';
+    const platDir = platformOverride === 'darwin'
+      ? 'macos'
+      : (platformOverride === 'linux' ? 'linux' : (platformOverride === 'win32' ? 'windows' : platformOverride));
+    const exeName = platformOverride === 'win32' ? 'tor.exe' : 'tor';
+    const homedir = os.homedir();
+    const execDir = process.execPath ? path.dirname(process.execPath) : '';
+
     const candidates = [
-      // 1. User persistent download directory (~/.noctis-browser/tor)
-      path.join(homedir, '.noctis-browser/tor/tor/tor'),
-      path.join(homedir, '.noctis-browser/tor/tor'),
-      path.join(homedir, '.noctis-browser/tor/tor.exe'),
-      path.join(homedir, '.noctis-browser/tor/tor/tor.exe'),
-      // 2. Bundled application candidates (macOS arm64 / x86_64)
-      path.join(__dirname, `../../bin/macos/${isArm ? 'aarch64' : 'x86_64'}/tor`),
-      path.join(__dirname, '../../bin/macos/x86_64/tor'),
-      path.join(process.resourcesPath || '', `app/bin/macos/${isArm ? 'aarch64' : 'x86_64'}/tor`),
-      path.join(process.resourcesPath || '', 'app/bin/macos/x86_64/tor'),
-      path.join(process.resourcesPath || '', 'bin/macos/x86_64/tor'),
-      // 3. User Downloads & Development mirrors
-      path.join(homedir, 'Downloads/tor-expert-bundle-macos-x86_64-15.0.25/tor/tor'),
-      path.join(homedir, 'Downloads/tor-expert-bundle-macos-x86_64-14.0.7/tor/tor'),
-      // 4. Standard system installations (Homebrew, MacPorts, Linux distro)
-      '/opt/homebrew/bin/tor',
-      '/usr/local/bin/tor',
-      '/usr/bin/tor',
-      // 5. Installed Tor Browser instances
-      '/Applications/Tor Browser.app/Contents/MacOS/Tor/tor.real',
-      '/Applications/Tor Browser.app/Contents/Resources/TorBrowser/Tor/tor',
-      'C:\\Program Files\\Tor Browser\\Browser\\TorBrowser\\Tor\\tor.exe'
+      // 1. Bundled cross-platform binaries in repo or packaged app resources
+      path.join(__dirname, `../../bin/${platDir}/${archDir}/${exeName}`),
+      path.join(__dirname, `../../bin/${platDir}/x86_64/${exeName}`),
+      path.join(process.resourcesPath || '', `app/bin/${platDir}/${archDir}/${exeName}`),
+      path.join(process.resourcesPath || '', `app/bin/${platDir}/x86_64/${exeName}`),
+      path.join(process.resourcesPath || '', `bin/${platDir}/${archDir}/${exeName}`),
+      path.join(process.resourcesPath || '', `bin/${platDir}/x86_64/${exeName}`),
+      // 2. Portable zero-admin bundle relative to executable directory
+      path.join(execDir, `bin/${platDir}/${archDir}/${exeName}`),
+      path.join(execDir, `bin/${platDir}/x86_64/${exeName}`),
+      path.join(execDir, `resources/app/bin/${platDir}/${archDir}/${exeName}`),
+      path.join(execDir, `resources/app/bin/${platDir}/x86_64/${exeName}`),
+      // 3. User persistent auto-download directory (~/.noctis-browser/tor)
+      path.join(homedir, `.noctis-browser/tor/tor/${exeName}`),
+      path.join(homedir, `.noctis-browser/tor/${exeName}`),
+      // 4. Platform-specific system & Tor Browser installations
+      ...(platformOverride === 'darwin' ? [
+        '/opt/homebrew/bin/tor',
+        '/usr/local/bin/tor',
+        '/Applications/Tor Browser.app/Contents/MacOS/Tor/tor.real',
+        '/Applications/Tor Browser.app/Contents/Resources/TorBrowser/Tor/tor'
+      ] : []),
+      ...(platformOverride === 'linux' ? [
+        '/usr/bin/tor',
+        '/usr/sbin/tor',
+        '/usr/local/bin/tor',
+        '/snap/bin/tor',
+        path.join(homedir, '.local/share/torbrowser/tbb/x86_64/tor-browser/Browser/TorBrowser/Tor/tor'),
+        path.join(homedir, 'tor-browser/Browser/TorBrowser/Tor/tor')
+      ] : []),
+      ...(platformOverride === 'win32' ? [
+        'C:\\Program Files\\Tor Browser\\Browser\\TorBrowser\\Tor\\tor.exe',
+        'C:\\Program Files (x86)\\Tor Browser\\Browser\\TorBrowser\\Tor\\tor.exe',
+        path.join(homedir, 'Desktop', 'Tor Browser', 'Browser', 'TorBrowser', 'Tor', 'tor.exe'),
+        path.join(homedir, 'AppData', 'Local', 'Tor Browser', 'Browser', 'TorBrowser', 'Tor', 'tor.exe')
+      ] : [])
     ];
 
     for (const p of candidates) {
       try {
-        if (fs.existsSync(p)) {
-          try { fs.chmodSync(p, 0o755); } catch (_) {}
+        if (p && fs.existsSync(p) && fs.statSync(p).isFile()) {
+          if (platformOverride !== 'win32') {
+            try { fs.chmodSync(p, 0o755); } catch (_) {}
+          }
           return p;
         }
       } catch (_) {}
@@ -431,11 +525,92 @@ class TorVpnManager extends EventEmitter {
   }
 
   /**
+   * Seed ephemeral Tor DataDirectory with cached public consensus files so Tor bootstraps in ~2s instead of ~12s.
+   */
+  _seedTorConsensusCache(torDataDir) {
+    try {
+      const cacheDir = path.join(os.homedir(), '.noctis-browser', 'tor-consensus-cache');
+      if (!fs.existsSync(cacheDir)) return;
+      const files = ['cached-certs', 'cached-microdesc-consensus', 'cached-microdescs', 'cached-microdescs.new'];
+      for (const f of files) {
+        const src = path.join(cacheDir, f);
+        const dest = path.join(torDataDir, f);
+        if (fs.existsSync(src) && !fs.existsSync(dest)) {
+          fs.copyFileSync(src, dest);
+        }
+      }
+    } catch (_) {}
+  }
+
+  _persistTorConsensusCache(torDataDir) {
+    try {
+      if (!torDataDir || !fs.existsSync(torDataDir)) return;
+      const cacheDir = path.join(os.homedir(), '.noctis-browser', 'tor-consensus-cache');
+      fs.mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
+      const files = ['cached-certs', 'cached-microdesc-consensus', 'cached-microdescs'];
+      for (const f of files) {
+        const src = path.join(torDataDir, f);
+        const dest = path.join(cacheDir, f);
+        if (fs.existsSync(src)) {
+          fs.copyFileSync(src, dest);
+        }
+      }
+    } catch (_) {}
+  }
+
+  /**
+   * Configure Tor exit node country code dynamically via ControlPort (e.g. "{ch}", "{is}", "{se}", "{us}", "{de}").
+   */
+  async _configureTorExitRelay(countryCode = '') {
+    const controlPort = this.daemons.torControlPort;
+    if (!controlPort) return false;
+    const normalized = countryCode || '';
+    if (this._appliedExitCountry === normalized) return true;
+
+    const { geoipPath, geoip6Path } = this.getGeoIpPaths();
+    const geoConfParts = [];
+    if (geoipPath) geoConfParts.push(`GeoIPFile="${geoipPath}"`);
+    if (geoip6Path) geoConfParts.push(`GeoIPv6File="${geoip6Path}"`);
+    const geoConfPrefix = geoConfParts.length > 0 ? geoConfParts.join(' ') + ' ' : '';
+
+    return new Promise((resolve) => {
+      const socket = new net.Socket();
+      let settled = false;
+      const done = (ok) => {
+        if (settled) return;
+        settled = true;
+        if (ok) this._appliedExitCountry = normalized;
+        try { socket.destroy(); } catch (_) {}
+        resolve(ok);
+      };
+      socket.setTimeout(800);
+      socket.once('connect', () => {
+        const setConfCmd = normalized
+          ? `SETCONF ${geoConfPrefix}ExitNodes="${normalized}" StrictNodes=0\r\n`
+          : `SETCONF ExitNodes="" StrictNodes=0\r\n`;
+        socket.write(`AUTHENTICATE ""\r\n${setConfCmd}SIGNAL NEWNYM\r\nQUIT\r\n`);
+      });
+      socket.on('data', (data) => {
+        if (data.toString().includes('250 OK')) {
+          done(true);
+        }
+      });
+      socket.once('error', () => done(false));
+      socket.once('timeout', () => done(false));
+      socket.connect(controlPort, '127.0.0.1');
+    });
+  }
+
+  /**
    * Launch a managed ephemeral Tor daemon using bundled or downloaded binary.
    */
   async startManagedTorDaemon() {
     await this.probeLocalDaemons();
     if (this.daemons.torSocksPort) {
+      const relay = VPN_EXIT_RELAYS[this.selectedRelay] || VPN_EXIT_RELAYS['ch-zurich'];
+      if (this.mode === 'built-in-vpn' && relay.countryCode) {
+        await this._configureTorExitRelay(relay.countryCode);
+      }
       this._refreshMaskedIp();
       return {
         success: true,
@@ -452,10 +627,11 @@ class TorVpnManager extends EventEmitter {
       };
     }
 
-    const torDataDir = path.join(this.ephemeralDirPath || '/tmp', 'tor-ephemeral-data');
+    const torDataDir = path.join(this.ephemeralDirPath || os.tmpdir(), 'tor-ephemeral-data');
     try {
       fs.mkdirSync(torDataDir, { recursive: true, mode: 0o700 });
     } catch (_) {}
+    this._seedTorConsensusCache(torDataDir);
 
     const port9050Occupied = await this.probePort(9050);
     const targetSocksPort = port9050Occupied ? 9250 : 9050;
@@ -468,22 +644,37 @@ class TorVpnManager extends EventEmitter {
       '--CookieAuthentication', '0'
     ];
 
+    const { geoipPath, geoip6Path } = this.getGeoIpPaths();
+    if (geoipPath) {
+      spawnArgs.push('--GeoIPFile', geoipPath);
+    }
+    if (geoip6Path) {
+      spawnArgs.push('--GeoIPv6File', geoip6Path);
+    }
+
+    const relay = VPN_EXIT_RELAYS[this.selectedRelay] || VPN_EXIT_RELAYS['ch-zurich'];
+    if (this.mode === 'built-in-vpn' && relay && relay.countryCode) {
+      spawnArgs.push('--ExitNodes', relay.countryCode, '--StrictNodes', '0');
+      this._appliedExitCountry = relay.countryCode;
+    }
+
     return new Promise((resolve) => {
       try {
         const proc = spawn(bin, spawnArgs, {
-          env: { ...process.env, DYLD_LIBRARY_PATH: path.dirname(bin) },
+          env: this.buildTorSpawnEnv(bin),
           stdio: ['ignore', 'pipe', 'pipe']
         });
 
         this._managedTorProcess = proc;
         this.daemons.torManagedPid = proc.pid;
+        this._managedTorDataDir = torDataDir;
 
         let settled = false;
         const finish = async (ok, msg) => {
           if (settled) return;
           settled = true;
+          this._persistTorConsensusCache(torDataDir);
           await this.probeLocalDaemons();
-          await this.applyRoutingToSessions();
           this._refreshMaskedIp();
           resolve({
             success: ok,
@@ -494,8 +685,8 @@ class TorVpnManager extends EventEmitter {
 
         proc.stdout.on('data', (chunk) => {
           const text = chunk.toString();
-          if (text.includes('Bootstrapped 100%') || text.includes('Opened Socks listener')) {
-            finish(true, `Managed Tor daemon bootstrapped on 127.0.0.1:${targetSocksPort}`);
+          if (text.includes('Bootstrapped 100%')) {
+            finish(true, `Managed Tor daemon bootstrapped 100% on 127.0.0.1:${targetSocksPort}`);
           }
         });
 
@@ -512,20 +703,94 @@ class TorVpnManager extends EventEmitter {
 
         setTimeout(() => {
           finish(Boolean(this.daemons.torSocksPort), 'Tor daemon startup initiated');
-        }, 5000);
+        }, 12000);
       } catch (err) {
         resolve({ success: false, error: err.message });
       }
     });
   }
 
+  /**
+   * Measure the host's real unproxied public IP so we can verify that VPN/Tor genuinely changes the egress IP.
+   */
+  async probeDirectBaselineIp(timeoutMs = 3500) {
+    if (this.directBaselineIp && net.isIP(this.directBaselineIp)) {
+      return this.directBaselineIp;
+    }
+
+    const queryDirect = (urlStr) => new Promise((resolve) => {
+      let settled = false;
+      const done = (ip) => {
+        if (settled) return;
+        settled = true;
+        resolve(ip);
+      };
+      const timer = setTimeout(() => done(null), timeoutMs);
+      try {
+        const req = https.get(urlStr, {
+          agent: new https.Agent({ keepAlive: false }),
+          headers: { 'User-Agent': 'NoctisBrowser-BaselineCheck/1.1' },
+          timeout: timeoutMs
+        }, (res) => {
+          let body = '';
+          res.on('data', (c) => { body += c; });
+          res.on('end', () => {
+            clearTimeout(timer);
+            const trimmed = (body || '').trim();
+            done(net.isIP(trimmed) ? trimmed : null);
+          });
+        });
+        req.on('error', () => { clearTimeout(timer); done(null); });
+        req.on('timeout', () => { clearTimeout(timer); req.destroy(); done(null); });
+      } catch (_) {
+        clearTimeout(timer);
+        done(null);
+      }
+    });
+
+    let ip = await queryDirect('https://api.ipify.org');
+    if (!ip) {
+      ip = await queryDirect('https://icanhazip.com');
+    }
+    if (ip && net.isIP(ip)) {
+      this.directBaselineIp = ip;
+    }
+    return this.directBaselineIp;
+  }
+
   async probeExternalIp() {
+    if (!this.directBaselineIp) {
+      await this.probeDirectBaselineIp(2500).catch(() => {});
+    }
+
+    let egressIp = null;
     if (this.mode === 'built-in-vpn') {
-      return this._probeExternalIpViaTunnel();
+      if (!this.daemons.torSocksPort) {
+        await this.startManagedTorDaemon();
+      }
+      egressIp = await this._probeExternalIpViaTunnel();
+      if (!egressIp && this.daemons.torSocksPort) {
+        egressIp = await this._probeExternalIpViaTor();
+      }
+    } else if (this.mode === 'tor' || this.daemons.torSocksPort) {
+      egressIp = await this._probeExternalIpViaTor();
     }
-    if (this.mode === 'tor' || this.daemons.torSocksPort) {
-      return this._probeExternalIpViaTor();
+
+    if (egressIp && net.isIP(egressIp)) {
+      if (this.directBaselineIp && egressIp === this.directBaselineIp) {
+        // Honest verification: Egress IP matches direct local ISP IP! Never claim masked.
+        this.ipMaskVerified = false;
+        this.lastUnmaskedIp = egressIp;
+        this.currentMaskedIp = null;
+        return null;
+      }
+      this.ipMaskVerified = true;
+      this.lastUnmaskedIp = null;
+      this.currentMaskedIp = egressIp;
+      return egressIp;
     }
+
+    this.ipMaskVerified = false;
     return null;
   }
 
@@ -546,7 +811,7 @@ class TorVpnManager extends EventEmitter {
         resolve(val);
       };
 
-      const timer = setTimeout(() => done(null), 3500);
+      const timer = setTimeout(() => done(null), 8000);
 
       const req = http.request({
         hostname: '127.0.0.1',
@@ -603,57 +868,42 @@ class TorVpnManager extends EventEmitter {
     if (!port) return null;
 
     return new Promise((resolve) => {
-      const socket = new net.Socket();
       let settled = false;
       const done = (val) => {
         if (settled) return;
         settled = true;
-        try { socket.destroy(); } catch (_) {}
         resolve(val);
       };
-      socket.setTimeout(3000);
-      socket.once('timeout', () => done(null));
-      socket.once('error', () => done(null));
+      const timer = setTimeout(() => done(null), 8000);
 
-      socket.connect(port, '127.0.0.1', () => {
-        // SOCKS5 greeting
-        socket.write(Buffer.from([0x05, 0x01, 0x00]));
-      });
-
-      let stage = 0;
-      let respBuffer = '';
-      socket.on('data', (chunk) => {
-        if (stage === 0) {
-          if (chunk[0] === 0x05 && chunk[1] === 0x00) {
-            stage = 1;
-            const host = 'api.ipify.org';
-            const hostBuf = Buffer.from(host, 'utf-8');
-            const req = Buffer.concat([
-              Buffer.from([0x05, 0x01, 0x00, 0x03, hostBuf.length]),
-              hostBuf,
-              Buffer.from([0x00, 0x50])
-            ]);
-            socket.write(req);
-          } else {
-            done(null);
-          }
-        } else if (stage === 1) {
-          if (chunk[0] === 0x05 && chunk[1] === 0x00) {
-            stage = 2;
-            socket.write('GET / HTTP/1.1\r\nHost: api.ipify.org\r\nUser-Agent: NoctisBrowser\r\nConnection: close\r\n\r\n');
-          } else {
-            done(null);
-          }
-        } else if (stage === 2) {
+      this._connectViaSocks5(port, 'api.ipify.org', 80, 7500).then((socket) => {
+        let respBuffer = '';
+        socket.on('data', (chunk) => {
           respBuffer += chunk.toString();
           const parts = respBuffer.split('\r\n\r\n');
           if (parts.length > 1) {
             const body = parts[1].trim();
             if (body && net.isIP(body)) {
+              clearTimeout(timer);
+              try { socket.destroy(); } catch (_) {}
               done(body);
             }
           }
-        }
+        });
+        socket.on('end', () => {
+          clearTimeout(timer);
+          const parts = respBuffer.split('\r\n\r\n');
+          const body = (parts[1] || '').trim();
+          done(body && net.isIP(body) ? body : null);
+        });
+        socket.on('error', () => {
+          clearTimeout(timer);
+          done(null);
+        });
+        socket.write('GET / HTTP/1.1\r\nHost: api.ipify.org\r\nUser-Agent: NoctisBrowser\r\nConnection: close\r\n\r\n');
+      }).catch(() => {
+        clearTimeout(timer);
+        done(null);
       });
     });
   }
@@ -661,11 +911,11 @@ class TorVpnManager extends EventEmitter {
   _refreshMaskedIp() {
     if (this.mode !== 'built-in-vpn' && this.mode !== 'tor') {
       this.currentMaskedIp = null;
+      this.ipMaskVerified = false;
       return;
     }
     this.probeExternalIp().then((ip) => {
-      if (ip && ip !== this.currentMaskedIp) {
-        this.currentMaskedIp = ip;
+      if (ip) {
         this.emit('status-updated', this.getStatus());
       }
     }).catch(() => {});
@@ -735,6 +985,94 @@ class TorVpnManager extends EventEmitter {
 
   // --- Built-in Local Encrypted Privacy Tunnel (Browser VPN) ---
 
+  /**
+   * Establish a TCP stream through a local SOCKS5 proxy (RFC 1928) so the Built-in VPN
+   * genuinely routes traffic through a remote exit relay and masks the user's origin IP.
+   */
+  _connectViaSocks5(socksPort, targetHost, targetPort, timeoutMs = 9000) {
+    return new Promise((resolve, reject) => {
+      const socket = new net.Socket();
+      let settled = false;
+      const fail = (err) => {
+        if (settled) return;
+        settled = true;
+        try { socket.destroy(); } catch (_) {}
+        reject(err || new Error('SOCKS5 connection failed'));
+      };
+
+      const timer = setTimeout(() => fail(new Error('SOCKS5 connection timeout')), timeoutMs);
+
+      socket.once('error', (err) => {
+        clearTimeout(timer);
+        fail(err);
+      });
+
+      socket.connect(socksPort, '127.0.0.1', () => {
+        // SOCKS5 greeting: Version 5, 1 Auth Method, No Auth (0x00)
+        socket.write(Buffer.from([0x05, 0x01, 0x00]));
+      });
+
+      let stage = 0;
+      const onData = (chunk) => {
+        if (stage === 0) {
+          if (chunk.length >= 2 && chunk[0] === 0x05 && chunk[1] === 0x00) {
+            stage = 1;
+            const portNum = parseInt(targetPort, 10) || 443;
+            const portBuf = Buffer.alloc(2);
+            portBuf.writeUInt16BE(portNum, 0);
+
+            if (net.isIPv4(targetHost)) {
+              const ipBytes = targetHost.split('.').map(n => parseInt(n, 10));
+              const req = Buffer.concat([
+                Buffer.from([0x05, 0x01, 0x00, 0x01]),
+                Buffer.from(ipBytes),
+                portBuf
+              ]);
+              socket.write(req);
+            } else {
+              const hostBuf = Buffer.from(String(targetHost), 'utf-8');
+              const req = Buffer.concat([
+                Buffer.from([0x05, 0x01, 0x00, 0x03, hostBuf.length]),
+                hostBuf,
+                portBuf
+              ]);
+              socket.write(req);
+            }
+          } else {
+            clearTimeout(timer);
+            fail(new Error('SOCKS5 auth negotiation failed'));
+          }
+        } else if (stage === 1) {
+          if (chunk.length >= 2 && chunk[0] === 0x05 && chunk[1] === 0x00) {
+            stage = 2;
+            clearTimeout(timer);
+            socket.removeListener('data', onData);
+            if (!settled) {
+              settled = true;
+              resolve(socket);
+            }
+          } else {
+            clearTimeout(timer);
+            fail(new Error(`SOCKS5 connect rejected (code ${chunk[1]})`));
+          }
+        }
+      };
+
+      socket.on('data', onData);
+    });
+  }
+
+  _getUpstreamSocksPort() {
+    if (this.daemons.torSocksPort) {
+      return this.daemons.torSocksPort;
+    }
+    if (this.mode === 'custom-proxy' && this.customProxyRules) {
+      const m = this.customProxyRules.match(/^socks5:\/\/127\.0\.0\.1:(\d+)/i);
+      if (m) return parseInt(m[1], 10);
+    }
+    return null;
+  }
+
   async _startLocalVpnTunnel() {
     if (this.tunnelServer) return this.tunnelPort;
 
@@ -744,7 +1082,7 @@ class TorVpnManager extends EventEmitter {
           this.metrics.tunnelConnections++;
           const parsed = new URL(clientReq.url);
           const targetHost = parsed.hostname;
-          const targetPort = parsed.port || (parsed.protocol === 'https:' ? 443 : 80);
+          const targetPort = parseInt(parsed.port, 10) || (parsed.protocol === 'https:' ? 443 : 80);
 
           // Enforce HTTPS-only / No plaintext over VPN tunnel or Tor
           const reqHost = clientReq.headers.host || parsed.host || '';
@@ -762,6 +1100,15 @@ class TorVpnManager extends EventEmitter {
           }
 
           const resolvedIp = await this.resolveHostViaDoH(targetHost);
+          const upstreamSocksPort = this._getUpstreamSocksPort();
+
+          // Fail-closed protection: never leak local IP if VPN/Tor is active and upstream relay is down
+          if ((this.mode === 'built-in-vpn' || this.mode === 'tor') && !upstreamSocksPort && !this.allowUnmaskedFallback) {
+            this.metrics.blockedByKillSwitch++;
+            clientRes.writeHead(502, { 'Content-Type': 'text/plain' });
+            clientRes.end('Noctis Browser VPN Fail-Closed: Upstream anonymizing exit relay is offline. Local IP leak prevented.');
+            return;
+          }
 
           // Strip identifying proxy headers
           const cleanHeaders = { ...clientReq.headers };
@@ -771,7 +1118,7 @@ class TorVpnManager extends EventEmitter {
           delete cleanHeaders['client-ip'];
 
           const options = {
-            hostname: resolvedIp || targetHost,
+            hostname: upstreamSocksPort ? targetHost : (resolvedIp || targetHost),
             port: targetPort,
             path: parsed.pathname + parsed.search,
             method: clientReq.method,
@@ -780,6 +1127,11 @@ class TorVpnManager extends EventEmitter {
               host: parsed.host
             }
           };
+
+          if (upstreamSocksPort) {
+            const socksSocket = await this._connectViaSocks5(upstreamSocksPort, targetHost, targetPort);
+            options.createConnection = () => socksSocket;
+          }
 
           const proxyReq = http.request(options, (proxyRes) => {
             clientRes.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
@@ -805,7 +1157,7 @@ class TorVpnManager extends EventEmitter {
         }
       });
 
-      // Handle HTTPS CONNECT Tunneling with Encrypted DoH Resolution
+      // Handle HTTPS CONNECT Tunneling with Encrypted DoH Resolution + Upstream SOCKS5 Exit Relay
       server.on('connect', async (req, clientSocket, head) => {
         this.metrics.tunnelConnections++;
         this.activeSockets.add(clientSocket);
@@ -815,7 +1167,53 @@ class TorVpnManager extends EventEmitter {
         const port = parseInt(rawPort, 10) || 443;
 
         try {
+          // Validate DNSSEC & DoH
           const connectHost = await this.resolveHostViaDoH(rawHost);
+          const upstreamSocksPort = this._getUpstreamSocksPort();
+
+          if (upstreamSocksPort) {
+            // Route through country-pinned SOCKS5 exit relay so origin IP is truly masked
+            const targetSocket = await this._connectViaSocks5(upstreamSocksPort, rawHost, port);
+            this.activeSockets.add(targetSocket);
+            targetSocket.on('close', () => this.activeSockets.delete(targetSocket));
+
+            clientSocket.write(
+              'HTTP/1.1 200 Connection Established\r\n' +
+              'Proxy-Agent: Noctis-Encrypted-Tunnel/2.1-SOCKS5\r\n' +
+              '\r\n'
+            );
+            if (head && head.length > 0) {
+              targetSocket.write(head);
+              this.metrics.tunnelBytesRouted += head.length;
+            }
+            targetSocket.on('data', (chunk) => {
+              this.metrics.tunnelBytesRouted += chunk.length;
+            });
+            clientSocket.on('data', (chunk) => {
+              this.metrics.tunnelBytesRouted += chunk.length;
+            });
+            targetSocket.pipe(clientSocket);
+            clientSocket.pipe(targetSocket);
+
+            targetSocket.on('error', () => {
+              try { clientSocket.destroy(); } catch (_) {}
+            });
+            clientSocket.on('error', () => {
+              try { targetSocket.destroy(); } catch (_) {}
+            });
+            return;
+          }
+
+          // Fail-closed if VPN or Tor mode is active without an upstream exit relay (unless allowUnmaskedFallback is explicitly set)
+          if ((this.mode === 'built-in-vpn' || this.mode === 'tor') && !this.allowUnmaskedFallback) {
+            this.metrics.blockedByKillSwitch++;
+            try {
+              clientSocket.write('HTTP/1.1 502 Bad Gateway\r\n\r\n');
+              clientSocket.destroy();
+            } catch (_) {}
+            return;
+          }
+
           let targetSocket = net.connect(port, connectHost || rawHost, () => {
             clientSocket.write(
               'HTTP/1.1 200 Connection Established\r\n' +
@@ -840,23 +1238,6 @@ class TorVpnManager extends EventEmitter {
           targetSocket.on('close', () => this.activeSockets.delete(targetSocket));
 
           targetSocket.on('error', () => {
-            // If connection to resolved IP failed, fallback to rawHost once
-            if (connectHost && connectHost !== rawHost && !clientSocket.destroyed) {
-              try {
-                const fbSocket = net.connect(port, rawHost, () => {
-                  clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
-                  if (head && head.length > 0) fbSocket.write(head);
-                  fbSocket.pipe(clientSocket);
-                  clientSocket.pipe(fbSocket);
-                });
-                this.activeSockets.add(fbSocket);
-                fbSocket.on('close', () => this.activeSockets.delete(fbSocket));
-                fbSocket.on('error', () => {
-                  try { clientSocket.destroy(); } catch (_) {}
-                });
-                return;
-              } catch (_) {}
-            }
             try { clientSocket.destroy(); } catch (_) {}
           });
 
@@ -1225,9 +1606,12 @@ class TorVpnManager extends EventEmitter {
 
     let defaultRoute = 'DIRECT';
     if (this.mode === 'built-in-vpn') {
-      defaultRoute = this.daemons.torSocksPort
-        ? `SOCKS5 127.0.0.1:${this.daemons.torSocksPort}; SOCKS 127.0.0.1:${this.daemons.torSocksPort}`
-        : (this.tunnelPort ? `PROXY 127.0.0.1:${this.tunnelPort}` : 'DIRECT');
+      // Route through local VPN tunnel (which strips headers, validates DoH+DNSSEC, and chains through country-pinned SOCKS5 exit relay)
+      defaultRoute = this.tunnelPort
+        ? `PROXY 127.0.0.1:${this.tunnelPort}`
+        : (this.daemons.torSocksPort
+          ? `SOCKS5 127.0.0.1:${this.daemons.torSocksPort}; SOCKS 127.0.0.1:${this.daemons.torSocksPort}`
+          : 'SOCKS5 127.0.0.1:1');
     } else if (this.mode === 'tor') {
       defaultRoute = torProxy;
     } else if (this.mode === 'i2p') {
@@ -1262,9 +1646,19 @@ class TorVpnManager extends EventEmitter {
       this.sessions = targetSessions.filter(Boolean);
     }
 
-    // Auto-launch managed Tor ONLY if in Tor mode and daemon is not yet active
-    if (this.mode === 'tor' && !this.daemons.torSocksPort) {
+    // Auto-launch managed Tor daemon for both Tor Onion Router AND Built-in Browser VPN so origin IP is truly masked
+    if ((this.mode === 'tor' || this.mode === 'built-in-vpn') && !this.daemons.torSocksPort) {
       await this.startManagedTorDaemon();
+    }
+
+    // Configure country-pinned exit node in Built-in VPN mode, or unpin in Tor mode
+    if (this.daemons.torControlPort) {
+      const relay = VPN_EXIT_RELAYS[this.selectedRelay] || VPN_EXIT_RELAYS['ch-zurich'];
+      if (this.mode === 'built-in-vpn' && relay && relay.countryCode) {
+        await this._configureTorExitRelay(relay.countryCode);
+      } else if (this.mode === 'tor') {
+        await this._configureTorExitRelay('');
+      }
     }
 
     for (const s of this.sessions) {
@@ -1281,7 +1675,7 @@ class TorVpnManager extends EventEmitter {
             await s.setProxy({ mode: 'direct' });
           }
         } else if (this.mode === 'built-in-vpn') {
-          if (this.killSwitch && !this.tunnelPort) {
+          if (this.killSwitch && (!this.tunnelPort || !this.daemons.torSocksPort)) {
             await s.setProxy({
               proxyRules: 'socks5://127.0.0.1:1',
               proxyBypassRules: ''
@@ -1290,7 +1684,7 @@ class TorVpnManager extends EventEmitter {
             await this._startLocalVpnTunnel();
             if (this.tunnelPort) {
               if (this.daemons.torSocksPort || this.daemons.i2pHttpPort || this.daemons.i2pSocksPort) {
-                // When Tor daemon is present, use PAC script so .onion routes to Tor while clearnet routes to the VPN tunnel
+                // When Tor daemon is present, use PAC script so .onion routes to Tor while clearnet routes to the VPN tunnel (which chains to country-pinned Tor SOCKS5)
                 const pacDataUrl = 'data:application/x-ns-proxy-autoconfig;base64,' +
                   Buffer.from(this.generatePacScript(), 'utf-8').toString('base64');
                 await s.setProxy({ pacScript: pacDataUrl });
@@ -1368,7 +1762,11 @@ class TorVpnManager extends EventEmitter {
     }
 
     if (updates.selectedRelay && VPN_EXIT_RELAYS[updates.selectedRelay]) {
-      this.selectedRelay = updates.selectedRelay;
+      if (this.selectedRelay !== updates.selectedRelay) {
+        this.selectedRelay = updates.selectedRelay;
+        this.currentMaskedIp = null;
+        this.ipMaskVerified = false;
+      }
     }
     if (updates.killSwitch !== undefined) {
       this.killSwitch = Boolean(updates.killSwitch);
@@ -1420,6 +1818,8 @@ class TorVpnManager extends EventEmitter {
     this.circuitCount++;
     this.lastRotatedAt = Date.now();
     this.dohCache.clear();
+    this.currentMaskedIp = null;
+    this.ipMaskVerified = false;
 
     // Close existing idle tunnel sockets to force new TCP/TLS handshakes
     for (const sock of this.activeSockets) {
@@ -1490,15 +1890,19 @@ class TorVpnManager extends EventEmitter {
     let badgeState = 'direct';
 
     if (this.mode === 'built-in-vpn') {
-      const maskedPart = this.currentMaskedIp ? ` — Exit IP: ${this.currentMaskedIp}` : '';
+      const hasVerifiedMask = Boolean(this.currentMaskedIp && (!this.directBaselineIp || this.currentMaskedIp !== this.directBaselineIp));
+      const maskedPart = hasVerifiedMask
+        ? ` — Exit IP: ${this.currentMaskedIp}`
+        : (this.daemons.torSocksPort ? ` — Relay SOCKS5 :${this.daemons.torSocksPort}` : ' — Exit Relay Offline');
       modeLabel = `Noctis Browser VPN (${relay.name})${maskedPart}`;
-      badgeText = this.currentMaskedIp ? `VPN • ${this.currentMaskedIp}` : `VPN • ${relay.region}`;
+      badgeText = hasVerifiedMask ? `VPN • ${this.currentMaskedIp}` : `VPN • ${relay.region}`;
       badgeState = 'vpn';
     } else if (this.mode === 'tor') {
       if (this.daemons.torSocksPort) {
-        const maskedPart = this.currentMaskedIp ? ` — Exit IP: ${this.currentMaskedIp}` : '';
+        const hasVerifiedMask = Boolean(this.currentMaskedIp && (!this.directBaselineIp || this.currentMaskedIp !== this.directBaselineIp));
+        const maskedPart = hasVerifiedMask ? ` — Exit IP: ${this.currentMaskedIp}` : '';
         modeLabel = `Tor Onion Router (SOCKS5 127.0.0.1:${this.daemons.torSocksPort})${maskedPart}`;
-        badgeText = this.currentMaskedIp ? `Tor • ${this.currentMaskedIp}` : 'Tor Active';
+        badgeText = hasVerifiedMask ? `Tor • ${this.currentMaskedIp}` : 'Tor Active';
         badgeState = 'tor';
       } else if (this.killSwitch) {
         modeLabel = 'Tor Kill-Switch Engaged (Daemon Offline — Traffic Blocked)';
@@ -1528,6 +1932,8 @@ class TorVpnManager extends EventEmitter {
       badgeState,
       vpnEnabled: this.mode === 'built-in-vpn',
       maskedIp: this.currentMaskedIp || null,
+      directBaselineIp: this.directBaselineIp || null,
+      ipMaskVerified: Boolean(this.currentMaskedIp && (!this.directBaselineIp || this.currentMaskedIp !== this.directBaselineIp)),
       selectedRelay: this.selectedRelay,
       relayDetails: relay,
       killSwitch: this.killSwitch,
@@ -1544,6 +1950,8 @@ class TorVpnManager extends EventEmitter {
       circuitId: this.circuitId,
       circuitCount: this.circuitCount,
       lastRotatedAt: this.lastRotatedAt,
+      platform: process.platform,
+      arch: process.arch,
       daemons: { ...this.daemons },
       metrics: { ...this.metrics },
       supportedProtocols: [
@@ -1563,7 +1971,7 @@ class TorVpnManager extends EventEmitter {
    * Hop 1: Browser Session & Security Interception Gate
    * Hop 2: Cryptographic DNS / DoH & DNSSEC Resolution
    * Hop 3: Local Encrypted Tunnel / Daemon Transport Layer
-   * Hop 4: Egress & Data Path Validation
+   * Hop 4: Egress & Data Path Validation (with honest directBaselineIp vs maskedExitIp verification)
    */
   async runRoutingPathDiagnostic(targetUrl = 'https://example.com') {
     const startTime = Date.now();
@@ -1574,7 +1982,6 @@ class TorVpnManager extends EventEmitter {
       parsedUrl = new URL('https://example.com');
     }
     const hostname = parsedUrl.hostname;
-    const isHttps = parsedUrl.protocol === 'https:';
 
     const hops = [];
 
@@ -1641,6 +2048,7 @@ class TorVpnManager extends EventEmitter {
     let transportMsg = '';
     let transportType = 'DIRECT';
     let transportDetails = {};
+    const upstreamSocksPort = this._getUpstreamSocksPort();
 
     if (this.mode === 'direct') {
       transportType = 'DIRECT';
@@ -1648,18 +2056,30 @@ class TorVpnManager extends EventEmitter {
       transportDetails = { direct: true };
     } else if (this.mode === 'built-in-vpn') {
       transportType = 'LOCAL_VPN_TUNNEL';
-      if (this.killSwitch && !this.tunnelPort) {
+      if (this.killSwitch && (!this.tunnelPort || !upstreamSocksPort)) {
         transportStatus = 'BLOCKED_BY_KILLSWITCH';
-        transportMsg = 'Kill-Switch active: tunnel offline, traffic blocked';
-      } else {
+        transportMsg = 'Kill-Switch active: tunnel or upstream exit relay offline, traffic blocked';
+      } else if (!upstreamSocksPort) {
+        transportStatus = 'DEGRADED';
         transportDetails = {
           relay: relay.name,
           relayRegion: relay.region,
           tunnelPort: this.tunnelPort,
+          upstreamSocksPort: null,
+          warning: 'Upstream SOCKS5 exit relay is offline; origin IP cannot be masked'
+        };
+        transportMsg = `WARNING: Local Tunnel (127.0.0.1:${this.tunnelPort}) has no active upstream SOCKS5 exit relay`;
+      } else {
+        transportDetails = {
+          relay: relay.name,
+          relayRegion: relay.region,
+          exitCountry: relay.countryCode,
+          tunnelPort: this.tunnelPort,
+          upstreamSocksPort,
           headerStripping: 'Enabled (User-Agent, Sec-CH-UA, Referer stripped)',
           circuitId: this.circuitId
         };
-        transportMsg = `Encrypted Tunnel on 127.0.0.1:${this.tunnelPort} -> Relay ${relay.name}`;
+        transportMsg = `Encrypted Tunnel 127.0.0.1:${this.tunnelPort} -> SOCKS5 :${upstreamSocksPort} -> Relay ${relay.name} (${relay.countryCode})`;
       }
     } else if (this.mode === 'tor') {
       transportType = 'TOR_ONION_ROUTER';
@@ -1678,9 +2098,9 @@ class TorVpnManager extends EventEmitter {
         transportStatus = 'FALLBACK_TUNNEL';
         transportDetails = {
           tunnelPort: this.tunnelPort,
-          note: 'Tor daemon offline: routing through built-in encrypted fallback tunnel'
+          note: 'Tor daemon offline: local tunnel active without onion circuit'
         };
-        transportMsg = `Tor Fallback: Built-in Encrypted Tunnel (127.0.0.1:${this.tunnelPort})`;
+        transportMsg = `Tor Fallback: Local Tunnel (127.0.0.1:${this.tunnelPort}) — Tor Daemon Offline`;
       }
     } else if (this.mode === 'i2p') {
       transportType = 'I2P_GARLIC_ROUTER';
@@ -1712,28 +2132,39 @@ class TorVpnManager extends EventEmitter {
       message: transportMsg
     });
 
-    // Hop 4: Egress & Data Path Validation
+    // Hop 4: Egress & Data Path Validation (Honest Baseline IP vs Masked Exit IP Comparison)
     const hop4Start = Date.now();
     let egressStatus = 'VERIFIED';
     let egressIp = this.currentMaskedIp;
     let egressMsg = '';
+    let ipMaskVerified = false;
 
     if (transportStatus === 'BLOCKED_BY_KILLSWITCH') {
       egressStatus = 'KILLSWITCH_PROTECTED';
       egressMsg = 'Zero-Trace Guarantee: Zero bytes leaked to clearnet (Kill-Switch Active)';
     } else {
-      if (!egressIp && (this.mode === 'built-in-vpn' || this.mode === 'tor')) {
-        try {
-          egressIp = await this.probeExternalIp();
-          if (egressIp) this.currentMaskedIp = egressIp;
-        } catch (_) {}
+      if (!this.directBaselineIp) {
+        try { await this.probeDirectBaselineIp(2500); } catch (_) {}
       }
       if (this.mode === 'built-in-vpn' || this.mode === 'tor') {
-        egressMsg = egressIp
-          ? `Protected Exit Node IP: ${egressIp} (Origin IP Fully Masked)`
-          : `Exit traffic routed through ${relay.name} (Virtual Egress)`;
+        if (!egressIp) {
+          try {
+            egressIp = await this.probeExternalIp();
+          } catch (_) {}
+        }
+        // Verify that egressIp exists AND differs from directBaselineIp
+        if (egressIp && (!this.directBaselineIp || egressIp !== this.directBaselineIp)) {
+          ipMaskVerified = true;
+          egressStatus = 'VERIFIED';
+          egressMsg = `Protected Exit Node IP: ${egressIp} (Origin IP ${this.directBaselineIp || 'Local'} Masked via ${relay.region})`;
+        } else {
+          ipMaskVerified = false;
+          egressStatus = 'UNMASKED_IP';
+          const leakedIp = this.lastUnmaskedIp || this.directBaselineIp || 'Local ISP IP';
+          egressMsg = `WARNING: Origin IP is NOT masked (${leakedIp}) — Upstream exit relay is offline or bypassed`;
+        }
       } else if (this.mode === 'direct') {
-        egressMsg = 'Direct Clearnet Egress to Destination Host';
+        egressMsg = `Direct Clearnet Egress to Destination Host${this.directBaselineIp ? ` (Origin IP: ${this.directBaselineIp})` : ''}`;
       } else {
         egressMsg = 'Data Path Validated through Proxy Egress';
       }
@@ -1745,7 +2176,9 @@ class TorVpnManager extends EventEmitter {
       status: egressStatus,
       latencyMs: hop4Latency,
       details: {
-        maskedExitIp: egressIp || 'Protected',
+        directBaselineIp: this.directBaselineIp || 'Unprobed',
+        maskedExitIp: ipMaskVerified ? egressIp : (this.mode === 'direct' ? (this.directBaselineIp || 'Direct') : 'UNMASKED'),
+        ipMaskVerified,
         targetHost: hostname,
         killSwitchArmed: this.killSwitch
       },
@@ -1756,7 +2189,7 @@ class TorVpnManager extends EventEmitter {
     let overallStatus = 'VERIFIED';
     if (transportStatus === 'BLOCKED_BY_KILLSWITCH') {
       overallStatus = 'KILLSWITCH_PROTECTED';
-    } else if (transportStatus === 'FALLBACK_TUNNEL') {
+    } else if (transportStatus === 'FALLBACK_TUNNEL' || transportStatus === 'DEGRADED' || egressStatus === 'UNMASKED_IP') {
       overallStatus = 'DEGRADED';
     }
 
@@ -1771,12 +2204,15 @@ class TorVpnManager extends EventEmitter {
         selectedRelay: this.selectedRelay,
         relayName: relay.name,
         relayRegion: relay.region,
+        exitCountry: relay.countryCode,
         killSwitch: this.killSwitch,
         dnsOverHttps: this.dnsOverHttps,
         forceDnssec: this.forceDnssec,
         requireSecureTraffic: this.requireSecureTraffic,
         circuitId: this.circuitId,
-        maskedIp: egressIp || this.currentMaskedIp
+        directBaselineIp: this.directBaselineIp,
+        maskedIp: ipMaskVerified ? egressIp : null,
+        ipMaskVerified
       },
       hops,
       timestamp: Date.now()
@@ -1784,6 +2220,9 @@ class TorVpnManager extends EventEmitter {
   }
 
   shutdown() {
+    if (this._managedTorDataDir) {
+      this._persistTorConsensusCache(this._managedTorDataDir);
+    }
     if (this._managedTorProcess) {
       try { this._managedTorProcess.kill('SIGTERM'); } catch (_) {}
       this._managedTorProcess = null;

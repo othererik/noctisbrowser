@@ -32,24 +32,25 @@ NoctisBrowser natively recognizes and routes 7 dark-web and decentralized protoc
 - **ZeroNet (`zero://`, `.bit`)**: Routes peer-to-peer ZeroSites via local ZeroNet node (`127.0.0.1:43110`).
 - **Hyphanet / Freenet (`hyphanet://`, `freenet:`)**: Routes freesites via local FProxy (`127.0.0.1:8888`).
 
-### 3. Built-in Browser VPN & Encrypted DoH Tunnel
-- **Self-Contained Encrypted Local Tunnel**: Includes an embedded HTTP/HTTPS `CONNECT` proxy server that resolves hostnames over **Encrypted DNS-over-HTTPS (DoH)** (Quad9 Switzerland, Mullvad Sweden, Cloudflare Iceland/US/DE) so local ISP DNS servers never see plaintext domain lookups.
-- **Strict Network Kill-Switch**: Optional kill-switch that blocks all clearnet traffic (`SOCKS5 127.0.0.1:1`) if Tor or I2P daemon connectivity drops.
-- **Circuit Rotation (`NEWNYM`)**: Flushes DoH caches, closes active tunnel sockets, clears Chromium host/auth caches, and sends `SIGNAL NEWNYM` to Tor ControlPort (`9051`/`9151`).
+### 3. Built-in Browser VPN, Country-Pinned Exit Relays & Honest Egress Verification
+- **True Multi-Hop IP Masking (`SOCKS5` Exit Relay + Encrypted DoH/DNSSEC Tunnel)**: Chains the local header-stripping HTTP/HTTPS `CONNECT` tunnel (`127.0.0.1:<tunnelPort>`) through a managed user-space SOCKS5 exit relay with GeoIP country pinning (`{ch}` Switzerland, `{is}` Iceland, `{se}` Sweden, `{us}` United States, `{de}` Germany) so your public egress IP genuinely changes without requiring root/TUN kernel privileges.
+- **Honest Baseline vs. Masked IP Verification**: Automatically measures your unproxied `directBaselineIp` and compares it against the tunnel's `maskedExitIp`. The 4-Hop Data Path Validator (`noctis://monitor`) only reports `VERIFIED` when `maskedExitIp !== directBaselineIp` and fails closed (`502` / `UNMASKED_IP` warning) if the upstream exit relay is offline.
+- **Cross-Platform Bundled Daemon (`macOS`, `Fedora/Debian/Arch Linux`, `Windows`)**: Bundles native `aarch64` and `x86_64` macOS and Linux ELF binaries, required shared libraries (`libevent-2.1.so.7`, `libssl.so.3`, `libcrypto.so.3`, `libtor.dylib`), and IPv4/IPv6 GeoIP databases (`bin/geoip/{geoip,geoip6}`) with automatic `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH` / `PATH` resolution.
+- **Strict Network Kill-Switch & Circuit Rotation (`NEWNYM`)**: Flushes DoH caches, closes active tunnel sockets, clears Chromium host/auth caches, and sends `SIGNAL NEWNYM` to Tor ControlPort (`9051`/`9251`).
 
 ### 4. Zero-Trace Ephemeral Architecture & Transparent Storage Inspector
 - Every launch creates an isolated session directory in OS temp (`/tmp/noctis-ephemeral-<timestamp>-<random>`) with Chromium disk caches disabled (`--disable-http-cache --disk-cache-size=0 --incognito`).
 - The **Privacy Vault (`noctis://vault`)** provides a live file explorer showing every single ephemeral file in RAM/temp, categorized by Cookies, Local Storage, IndexedDB, and Config, with one-click purge and guaranteed background reaper cleanup on exit.
 
 ### 5. Real-Time CDP Network Cockpit & Monitor (`noctis://monitor`)
-- Inspect live requests, group traffic by destination host or initiator script, pause/intercept requests with breakpoints, block ad/tracker hosts, opt-in to community blocklist feeds (Peter Lowe, StevenBlack, AdGuard DNS), and export standard HAR archives.
+- Inspect live requests, group traffic by destination host or initiator script, validate the live 4-hop routing path, pause/intercept requests with breakpoints, block ad/tracker hosts, opt-in to community blocklist feeds (Peter Lowe, StevenBlack, AdGuard DNS), and export standard HAR archives.
 
 ---
 
-## Quick Start
+## Quick Start (Zero-Admin / Portable)
 
 ```bash
-# Launch NoctisBrowser
+# Launch NoctisBrowser directly in-place (no admin/root required)
 ./start.sh
 # or
 npm start
@@ -57,15 +58,23 @@ npm start
 
 ## Running the Automated Verification Suite
 
-All unit and headless E2E tests run automatically and exit cleanly without manual intervention:
+All unit and headless E2E tests (including live VPN IP change verification and cross-platform binary/ELF checks) run automatically and exit cleanly:
 
 ```bash
 npm test
 ```
 
-## Packaging a Standalone macOS Application (`dist/NoctisBrowser.app`)
+## Building Zero-Admin Portable Distributions (`dist/`)
+
+Build self-contained, zero-admin portable bundles for **macOS**, **Linux (`x86_64`)**, and **Windows (`x64`)** that can be placed in any folder and launched without root, `sudo`, or installer privileges:
 
 ```bash
 npm run build:icons
-npm run package:mac
+npm run dist:portable
 ```
+
+Output directories in `dist/`:
+- `dist/NoctisBrowser.app` & `dist/NoctisBrowser-macOS-Portable/` (`Launch-NoctisBrowser.command`)
+- `dist/NoctisBrowser-Linux-x64-Portable/` (`launch-noctis-browser.sh` + `NoctisBrowser.desktop`)
+- `dist/NoctisBrowser-Windows-x64-Portable/` (`Launch-NoctisBrowser.bat`)
+
