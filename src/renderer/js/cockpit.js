@@ -61,11 +61,13 @@ class NetworkCockpit {
     this.shieldStatusText = document.getElementById('shield-status-text');
     this.shieldBlockedCount = document.getElementById('shield-blocked-count');
 
-    // Opt-in Feed Elements
+    // Default-Loaded Community Feed Elements
+    this.toggleCommunityFeeds = document.getElementById('toggle-community-feeds');
     this.selectBlocklistFeed = document.getElementById('select-blocklist-feed');
     this.inputCustomFeedUrl = document.getElementById('input-custom-feed-url');
     this.btnFetchFeed = document.getElementById('btn-fetch-feed');
     this.btnFetchText = document.getElementById('btn-fetch-text');
+    this.btnUnloadFeed = document.getElementById('btn-unload-feed');
     this.btnResetFeed = document.getElementById('btn-reset-feed');
     this.feedFeedbackMsg = document.getElementById('feed-feedback-msg');
     this.feedActiveName = document.getElementById('feed-active-name');
@@ -154,6 +156,17 @@ class NetworkCockpit {
       });
     }
 
+    // Toggle Community Filter Feeds (Loaded by Default vs Unloaded)
+    if (this.toggleCommunityFeeds) {
+      this.toggleCommunityFeeds.addEventListener('change', async (e) => {
+        if (e.target.checked) {
+          await this.handleResetFeed();
+        } else {
+          await this.handleUnloadFeed();
+        }
+      });
+    }
+
     // Feed Selector dropdown change
     if (this.selectBlocklistFeed && this.inputCustomFeedUrl) {
       this.selectBlocklistFeed.addEventListener('change', () => {
@@ -161,12 +174,17 @@ class NetworkCockpit {
       });
     }
 
-    // Trigger Opt-in Feed Download & Update
+    // Trigger Feed Download & Update
     if (this.btnFetchFeed) {
       this.btnFetchFeed.addEventListener('click', () => this.handleFetchFeed());
     }
 
-    // Reset Feed to Defaults
+    // Unload Community Feeds
+    if (this.btnUnloadFeed) {
+      this.btnUnloadFeed.addEventListener('click', () => this.handleUnloadFeed());
+    }
+
+    // Reset Feed to Default Loaded Community Feed
     if (this.btnResetFeed) {
       this.btnResetFeed.addEventListener('click', () => this.handleResetFeed());
     }
@@ -530,6 +548,11 @@ class NetworkCockpit {
       this.toggleDenyTrackers.checked = !!stats.denyByDefaultTrackers;
     }
 
+    const feedsLoaded = stats.communityFeedsLoaded !== false && (stats.feedDomainsCount || 0) > 0;
+    if (this.toggleCommunityFeeds) {
+      this.toggleCommunityFeeds.checked = feedsLoaded;
+    }
+
     if (stats.activeFeedName && this.feedActiveName) {
       this.feedActiveName.textContent = stats.activeFeedName;
     }
@@ -538,16 +561,18 @@ class NetworkCockpit {
       this.feedDomainsCount.textContent = `${count.toLocaleString()} Hosts in RAM`;
     }
     if (this.feedActiveBadge) {
-      if (stats.feedDomainsCount > 0) {
-        this.feedActiveBadge.textContent = 'Feed Active';
+      if (feedsLoaded) {
+        this.feedActiveBadge.textContent = stats.activeFeedName && stats.activeFeedName.includes('(Default)')
+          ? 'Loaded by Default'
+          : 'Feed Active';
         this.feedActiveBadge.style.color = '#34d399';
         this.feedActiveBadge.style.background = 'rgba(52, 211, 153, 0.15)';
         this.feedActiveBadge.style.borderColor = 'rgba(52, 211, 153, 0.3)';
       } else {
-        this.feedActiveBadge.textContent = 'Pre-loaded';
-        this.feedActiveBadge.style.color = '#818cf8';
-        this.feedActiveBadge.style.background = 'rgba(99, 102, 241, 0.18)';
-        this.feedActiveBadge.style.borderColor = 'rgba(99, 102, 241, 0.3)';
+        this.feedActiveBadge.textContent = 'Unloaded (Core Only)';
+        this.feedActiveBadge.style.color = '#fbbf24';
+        this.feedActiveBadge.style.background = 'rgba(251, 191, 36, 0.15)';
+        this.feedActiveBadge.style.borderColor = 'rgba(251, 191, 36, 0.35)';
       }
     }
   }
@@ -571,7 +596,7 @@ class NetworkCockpit {
     try {
       const res = await window.netscope.fetchFeed(feedId, customUrl);
       if (res && res.success) {
-        this.showFeedFeedback(`Added ${res.domainsCount.toLocaleString()} domains from ${res.feedName} into memory!`, 'success');
+        this.showFeedFeedback(`Loaded ${res.domainsCount.toLocaleString()} domains from ${res.feedName} into memory!`, 'success');
         if (res.stats) {
           this.updatePrivacyUI(res.stats);
         }
@@ -582,14 +607,29 @@ class NetworkCockpit {
       this.showFeedFeedback(`Error: ${err.message}`, 'error');
     } finally {
       this.btnFetchFeed.disabled = false;
-      if (this.btnFetchText) this.btnFetchText.textContent = 'Update Filter List (Opt-In)';
+      if (this.btnFetchText) this.btnFetchText.textContent = 'Load / Update Feed';
+    }
+  }
+
+  async handleUnloadFeed() {
+    try {
+      const api = window.noctis || window.netscope;
+      const res = api.unloadFeed
+        ? await api.unloadFeed()
+        : await api.toggleCommunityFeeds(false);
+      this.showFeedFeedback('Unloaded community filter feeds (retaining core built-in shield only).', 'success');
+      if (res && res.stats) {
+        this.updatePrivacyUI(res.stats);
+      }
+    } catch (err) {
+      this.showFeedFeedback(`Error unloading feeds: ${err.message}`, 'error');
     }
   }
 
   async handleResetFeed() {
     try {
       const res = await window.netscope.resetFeed();
-      this.showFeedFeedback('Reset to default built-in protection list.', 'success');
+      this.showFeedFeedback('Restored default pre-loaded community filter feed.', 'success');
       if (res && res.stats) {
         this.updatePrivacyUI(res.stats);
       }

@@ -1,42 +1,66 @@
 const https = require('https');
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const { URL } = require('url');
+
+const DEFAULT_BUNDLED_FEED_PATH = path.join(__dirname, 'feeds', 'peter_lowe_hosts.txt');
 
 /**
  * Curated public feeds for advertising, tracking, and sponsored feeds.
- * All feeds are strictly opt-in; no network calls are ever made without
- * explicit user request.
+ * Aligned with NoctisBrowser's deny-by-default stance, the primary community
+ * filter feed is pre-loaded into RAM by default on startup, with an explicit
+ * option to unload or switch feeds at any time.
  */
 const CURATED_FEEDS = {
   peter_lowe: {
     id: 'peter_lowe',
     name: "Peter Lowe's Ad & Tracking Servers",
-    description: "Lightweight, highly-vetted community list of ad servers and tracking nodes (pgl.yoyo.org).",
+    description: "Lightweight, highly-vetted community list of ad servers and tracking nodes (pgl.yoyo.org). Loaded by default.",
     url: 'https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext',
-    format: 'hosts'
+    format: 'hosts',
+    defaultLoaded: true
   },
   steven_black: {
     id: 'steven_black',
     name: "StevenBlack Unified Hosts",
     description: "Consolidated, reputable hosts file combining multiple vetted ad & malware feeds (GitHub).",
     url: 'https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts',
-    format: 'hosts'
+    format: 'hosts',
+    defaultLoaded: false
   },
   adguard_dns: {
     id: 'adguard_dns',
     name: "AdGuard DNS Filter",
     description: "Comprehensive DNS-level ad, tracker, and telemetry blocklist.",
     url: 'https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt',
-    format: 'mixed'
+    format: 'mixed',
+    defaultLoaded: false
   }
 };
 
 class FeedManager {
   constructor() {
-    this.currentFeed = null;
-    this.lastUpdated = null;
-    this.importedDomainsCount = 0;
-    this.feedSourceUrl = null;
+    this.defaultDomains = this._loadBundledDefaultDomains();
+    this.currentFeed = `${CURATED_FEEDS.peter_lowe.name} (Default)`;
+    this.lastUpdated = Date.now();
+    this.importedDomainsCount = this.defaultDomains.length;
+    this.feedSourceUrl = CURATED_FEEDS.peter_lowe.url;
+    this.isLoaded = true;
+  }
+
+  _loadBundledDefaultDomains() {
+    try {
+      if (fs.existsSync(DEFAULT_BUNDLED_FEED_PATH)) {
+        const raw = fs.readFileSync(DEFAULT_BUNDLED_FEED_PATH, 'utf8');
+        return this.parseHostsText(raw);
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  getDefaultDomains() {
+    return this.defaultDomains;
   }
 
   getCuratedFeeds() {
@@ -45,6 +69,7 @@ class FeedManager {
 
   getFeedStatus() {
     return {
+      isLoaded: this.isLoaded,
       currentFeed: this.currentFeed,
       lastUpdated: this.lastUpdated,
       importedDomainsCount: this.importedDomainsCount,
@@ -54,7 +79,7 @@ class FeedManager {
 
   /**
    * Fetch and parse an ad/tracker blocklist from a URL.
-   * Strictly user opt-in. Uses anonymous headers with no cookies or referrer.
+   * Uses anonymous headers with no cookies or referrer.
    */
   async fetchFeed(feedIdOrUrl, customUrl = null) {
     let targetUrl = '';
@@ -63,14 +88,34 @@ class FeedManager {
     if (CURATED_FEEDS[feedIdOrUrl]) {
       targetUrl = CURATED_FEEDS[feedIdOrUrl].url;
       feedName = CURATED_FEEDS[feedIdOrUrl].name;
-    } else if (customUrl || feedIdOrUrl.startsWith('http://') || feedIdOrUrl.startsWith('https://')) {
+    } else if (customUrl || (feedIdOrUrl && (feedIdOrUrl.startsWith('http://') || feedIdOrUrl.startsWith('https://')))) {
       targetUrl = customUrl || feedIdOrUrl;
       feedName = 'Custom Community List';
     } else {
       throw new Error(`Unknown feed identifier: ${feedIdOrUrl}`);
     }
 
-    const rawText = await this._downloadText(targetUrl);
+    let rawText;
+    try {
+      rawText = await this._downloadText(targetUrl);
+    } catch (err) {
+      // Fallback to bundled offline copy if fetching peter_lowe while offline
+      if (feedIdOrUrl === 'peter_lowe' && this.defaultDomains.length > 0) {
+        this.currentFeed = `${feedName} (Default)`;
+        this.lastUpdated = Date.now();
+        this.importedDomainsCount = this.defaultDomains.length;
+        this.feedSourceUrl = targetUrl;
+        this.isLoaded = true;
+        return {
+          feedName: this.currentFeed,
+          sourceUrl: targetUrl,
+          domainsCount: this.defaultDomains.length,
+          domains: this.defaultDomains
+        };
+      }
+      throw err;
+    }
+
     const domains = this.parseHostsText(rawText);
 
     if (domains.length === 0) {
@@ -81,6 +126,7 @@ class FeedManager {
     this.lastUpdated = Date.now();
     this.importedDomainsCount = domains.length;
     this.feedSourceUrl = targetUrl;
+    this.isLoaded = true;
 
     return {
       feedName,
@@ -151,11 +197,37 @@ class FeedManager {
     return Array.from(domainSet);
   }
 
-  reset() {
+  /**
+   * Unload all community filter feeds from memory (aligning with explicit user opt-out).
+   */
+  unloadFeed() {
     this.currentFeed = null;
-    this.lastUpdated = null;
+    this.lastUpdated = Date.now();
     this.importedDomainsCount = 0;
     this.feedSourceUrl = null;
+    this.isLoaded = false;
+    return this.getFeedStatus();
+  }
+
+  /**
+   * Reload the default bundled community filter feed.
+   */
+  loadDefaultFeed() {
+    this.currentFeed = `${CURATED_FEEDS.peter_lowe.name} (Default)`;
+    this.lastUpdated = Date.now();
+    this.importedDomainsCount = this.defaultDomains.length;
+    this.feedSourceUrl = CURATED_FEEDS.peter_lowe.url;
+    this.isLoaded = true;
+    return {
+      feedName: this.currentFeed,
+      sourceUrl: this.feedSourceUrl,
+      domainsCount: this.defaultDomains.length,
+      domains: this.defaultDomains
+    };
+  }
+
+  reset() {
+    return this.loadDefaultFeed();
   }
 
   _downloadText(urlString) {

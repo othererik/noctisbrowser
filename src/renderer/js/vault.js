@@ -351,6 +351,33 @@ function initIdentityControls() {
     });
   }
 
+  // Toggle Community Filter Feeds (Default Loaded vs Unloaded)
+  const toggleCommunityFeeds = document.getElementById('vault-toggle-community-feeds');
+  if (toggleCommunityFeeds) {
+    toggleCommunityFeeds.addEventListener('change', async (e) => {
+      try {
+        const enabled = e.target.checked;
+        const res = api.toggleCommunityFeeds
+          ? await api.toggleCommunityFeeds(enabled)
+          : (enabled ? await api.resetFeed() : (api.unloadFeed ? await api.unloadFeed() : null));
+        if (res && res.stats) {
+          updateVaultFeedUI(res.stats);
+        }
+        showVaultToast(enabled
+          ? 'Community Filter Feeds Loaded into RAM!'
+          : 'Community Filter Feeds Unloaded (Core Built-in Shield Only)');
+      } catch (_) {}
+    });
+  }
+
+  if (api.onFeedUpdated) {
+    api.onFeedUpdated((data) => {
+      if (data && data.stats) {
+        updateVaultFeedUI(data.stats);
+      }
+    });
+  }
+
   // Save profile
   const btnSave = document.getElementById('btn-save-profile');
   btnSave.addEventListener('click', async () => {
@@ -431,11 +458,39 @@ function initIdentityControls() {
   });
 }
 
+function updateVaultFeedUI(stats) {
+  if (!stats) return;
+  const toggleEl = document.getElementById('vault-toggle-community-feeds');
+  const badgeEl = document.getElementById('vault-feed-status-badge');
+  const nameEl = document.getElementById('vault-feed-name-text');
+  const countEl = document.getElementById('vault-feed-count-text');
+
+  const loaded = stats.communityFeedsLoaded !== false && (stats.feedDomainsCount || 0) > 0;
+  if (toggleEl) toggleEl.checked = loaded;
+  if (nameEl && stats.activeFeedName) nameEl.textContent = stats.activeFeedName;
+  if (countEl) countEl.textContent = `${(stats.totalBlockedHosts || 0).toLocaleString()} hosts in RAM`;
+  if (badgeEl) {
+    if (loaded) {
+      badgeEl.textContent = stats.activeFeedName && stats.activeFeedName.includes('(Default)')
+        ? 'LOADED BY DEFAULT'
+        : 'FEED ACTIVE';
+      badgeEl.className = 'badge green';
+    } else {
+      badgeEl.textContent = 'UNLOADED (CORE ONLY)';
+      badgeEl.className = 'badge amber';
+    }
+  }
+}
+
 async function loadProfile() {
   try {
     presets = await api.getFingerprintPresets();
     activeProfile = await api.getFingerprintProfile();
     updateIdentityForm(activeProfile);
+    if (api.getPrivacyStats) {
+      const stats = await api.getPrivacyStats();
+      updateVaultFeedUI(stats);
+    }
     runLiveFingerprintProbes();
   } catch (err) {
     console.error('Failed to load profile:', err);

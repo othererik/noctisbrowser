@@ -122,6 +122,20 @@
         </label>
       </div>
 
+      <div class="toggle-row" style="margin-top: 8px;">
+        <div class="toggle-info">
+          <span class="toggle-title">Community Ad &amp; Tracker Filter Feeds (Deny-by-Default)</span>
+          <span class="toggle-desc">Pre-loads vetted community filter lists (<span id="vault-feed-name-text" class="mono">Peter Lowe's Ad &amp; Tracking Servers (Default)</span> — <span id="vault-feed-count-text" class="mono">3,600+ hosts</span>) into RAM on startup. Toggle off to unload community feeds and retain only core built-in rules.</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="badge green" id="vault-feed-status-badge">LOADED BY DEFAULT</span>
+          <label class="switch" title="Load Community Filter Feeds by Default (Toggle off to unload)">
+            <input type="checkbox" id="vault-toggle-community-feeds" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
       <div style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-top: 10px;">
         <div class="form-group" style="flex: 1; min-width: 200px;">
           <label class="form-label">Drift Variation Frequency</label>

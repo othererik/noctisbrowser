@@ -810,7 +810,7 @@ ipcMain.handle('privacy:open-storage-folder', () => {
   return { success: false };
 });
 
-// Community Feed Handlers
+// Community Feed Handlers (Loaded by Default, with Explicit Unload Option)
 ipcMain.handle('privacy:get-curated-feeds', () => {
   return feedManager.getCuratedFeeds();
 });
@@ -826,28 +826,70 @@ ipcMain.handle('privacy:fetch-feed', async (_, { feedId, customUrl }) => {
   try {
     const result = await feedManager.fetchFeed(feedId, customUrl);
     const addedCount = privacyEngine.addFeedDomains(result.domains, result.feedName);
+    const stats = privacyEngine.getStats();
     sendToRenderer('privacy:feed-updated', {
       feedName: result.feedName,
       domainsCount: result.domainsCount,
       addedCount,
-      stats: privacyEngine.getStats()
+      communityFeedsLoaded: true,
+      stats
     });
-    return { success: true, ...result, addedCount, stats: privacyEngine.getStats() };
+    return { success: true, ...result, addedCount, stats };
   } catch (err) {
     return { success: false, error: err.message };
   }
 });
 
-ipcMain.handle('privacy:reset-feed', () => {
-  feedManager.reset();
-  privacyEngine.resetToDefaults();
+ipcMain.handle('privacy:unload-feed', () => {
+  feedManager.unloadFeed();
+  const stats = privacyEngine.unloadCommunityFeeds();
   sendToRenderer('privacy:feed-updated', {
-    feedName: 'Built-in Ad & Tracker Shield',
+    feedName: stats.activeFeedName,
     domainsCount: 0,
     addedCount: 0,
-    stats: privacyEngine.getStats()
+    communityFeedsLoaded: false,
+    stats
   });
-  return { success: true, stats: privacyEngine.getStats() };
+  return { success: true, communityFeedsLoaded: false, stats };
+});
+
+ipcMain.handle('privacy:reset-feed', () => {
+  feedManager.loadDefaultFeed();
+  const stats = privacyEngine.resetToDefaults();
+  sendToRenderer('privacy:feed-updated', {
+    feedName: stats.activeFeedName,
+    domainsCount: stats.feedDomainsCount,
+    addedCount: stats.feedDomainsCount,
+    communityFeedsLoaded: true,
+    stats
+  });
+  return { success: true, communityFeedsLoaded: true, stats };
+});
+
+ipcMain.handle('privacy:toggle-community-feeds', (_, { enabled }) => {
+  if (enabled) {
+    feedManager.loadDefaultFeed();
+    const stats = privacyEngine.loadDefaultCommunityFeed();
+    sendToRenderer('privacy:feed-updated', {
+      feedName: stats.activeFeedName,
+      domainsCount: stats.feedDomainsCount,
+      addedCount: stats.feedDomainsCount,
+      communityFeedsLoaded: true,
+      stats
+    });
+    return { success: true, communityFeedsLoaded: true, stats };
+  } else {
+    feedManager.unloadFeed();
+    const stats = privacyEngine.unloadCommunityFeeds();
+    sendToRenderer('privacy:feed-updated', {
+      feedName: stats.activeFeedName,
+      domainsCount: 0,
+      addedCount: 0,
+      communityFeedsLoaded: false,
+      stats
+    });
+    return { success: true, communityFeedsLoaded: false, stats };
+  }
 });
 
 // App Lifecycle
@@ -891,7 +933,10 @@ app.whenReady().then(async () => {
 
     s.webRequest.onBeforeRequest((details, callback) => {
       try {
-        const blockCheck = networkManager.checkBlocked(details.url);
+        const initiatorForSubresource = details.resourceType && details.resourceType !== 'mainFrame'
+          ? (details.referrer || details.initiator || null)
+          : null;
+        const blockCheck = networkManager.checkBlocked(details.url, initiatorForSubresource);
         if (blockCheck.blocked) {
           networkManager.metrics.totalBlocked++;
           networkManager.emit('request-blocked', {

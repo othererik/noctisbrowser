@@ -31,7 +31,9 @@ const browserApi = {
   getCuratedFeeds: () => ipcRenderer.invoke('privacy:get-curated-feeds'),
   getFeedStatus: () => ipcRenderer.invoke('privacy:get-feed-status'),
   fetchFeed: (feedId, customUrl) => ipcRenderer.invoke('privacy:fetch-feed', { feedId, customUrl }),
+  unloadFeed: () => ipcRenderer.invoke('privacy:unload-feed'),
   resetFeed: () => ipcRenderer.invoke('privacy:reset-feed'),
+  toggleCommunityFeeds: (enabled) => ipcRenderer.invoke('privacy:toggle-community-feeds', { enabled }),
   onFeedUpdated: (cb) => {
     const handler = (_, data) => cb(data);
     ipcRenderer.on('privacy:feed-updated', handler);
