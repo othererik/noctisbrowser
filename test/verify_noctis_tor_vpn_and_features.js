@@ -407,9 +407,11 @@ async function runTests() {
             const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
             const kbd = navigator.keyboard && navigator.keyboard.getLayoutMap ? await navigator.keyboard.getLayoutMap() : null;
 
-            // Live WebRTC STUN / ICE leak probe (same vector as browserleaks.com/ip)
+            // Live WebRTC STUN / ICE / getStats / Dynamic Iframe leak probe
             const webrtcLeaks = [];
             let localSdp = '';
+            let statsCandidateCount = 0;
+            let iframeShielded = false;
             if (window.RTCPeerConnection) {
               try {
                 const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
@@ -423,7 +425,23 @@ async function runTests() {
                 await pc.setLocalDescription(offer);
                 await new Promise(r => setTimeout(r, 400));
                 localSdp = pc.localDescription ? pc.localDescription.sdp : '';
+                if (pc.getStats) {
+                  const stats = await pc.getStats();
+                  stats.forEach((v) => {
+                    if (v && (v.type === 'local-candidate' || v.type === 'remote-candidate')) {
+                      statsCandidateCount++;
+                    }
+                  });
+                }
                 pc.close();
+              } catch (_) {}
+
+              try {
+                const ifr = document.createElement('iframe');
+                document.body.appendChild(ifr);
+                const cw = ifr.contentWindow;
+                iframeShielded = Boolean(cw && cw.RTCPeerConnection === window.RTCPeerConnection && cw.navigator.platform === navigator.platform);
+                ifr.remove();
               } catch (_) {}
             }
 
@@ -441,7 +459,10 @@ async function runTests() {
               hdrMatch: window.matchMedia('(dynamic-range: high)').matches,
               p3Match: window.matchMedia('(color-gamut: p3)').matches,
               webrtcLeaksCount: webrtcLeaks.length,
-              sdpHasCandidate: localSdp.includes('a=candidate:')
+              sdpHasCandidate: localSdp.includes('a=candidate:'),
+              statsCandidateCount,
+              iframeShielded,
+              tzOffset: new Date().getTimezoneOffset()
             };
           })()
         \`);
@@ -462,8 +483,11 @@ async function runTests() {
   assert.strictEqual(guestChecks.p3Match, false, 'P3 wide gamut display media query normalized');
   assert.strictEqual(guestChecks.webrtcLeaksCount, 0, 'WebRTC must emit zero ICE candidate IP leaks');
   assert.strictEqual(guestChecks.sdpHasCandidate, false, 'WebRTC localDescription.sdp must contain zero a=candidate lines');
+  assert.strictEqual(guestChecks.statsCandidateCount, 0, 'WebRTC getStats() must expose zero local/remote candidate IPs');
+  assert.strictEqual(guestChecks.iframeShielded, true, 'Dynamic about:blank iframe contentWindow must be shielded');
+  assert.strictEqual(guestChecks.tzOffset, 0, 'Date.getTimezoneOffset() must match active Linux UTC profile (0)');
 
-  console.log('   ✔ Guest webview Letterboxing, WebRTC STUN/ICE Leak Shield, Storage Quota, Sensors, Gamepads & Display verified.');
+  console.log('   ✔ Guest webview Letterboxing, WebRTC STUN/ICE/getStats/Iframe Shield, Timezone, Storage Quota, Sensors & Display verified.');
 
   torVpnManager.shutdown();
   try { fs.rmSync(testEphemeralDir, { recursive: true, force: true }); } catch (_) {}

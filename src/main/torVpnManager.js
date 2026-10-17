@@ -717,6 +717,9 @@ class TorVpnManager extends EventEmitter {
     if (this.directBaselineIp && net.isIP(this.directBaselineIp)) {
       return this.directBaselineIp;
     }
+    if (this._baselineProbePromise) {
+      return this._baselineProbePromise;
+    }
 
     const queryDirect = (urlStr) => new Promise((resolve) => {
       let settled = false;
@@ -748,14 +751,19 @@ class TorVpnManager extends EventEmitter {
       }
     });
 
-    let ip = await queryDirect('https://api.ipify.org');
-    if (!ip) {
-      ip = await queryDirect('https://icanhazip.com');
-    }
-    if (ip && net.isIP(ip)) {
-      this.directBaselineIp = ip;
-    }
-    return this.directBaselineIp;
+    this._baselineProbePromise = (async () => {
+      let ip = await queryDirect('https://api.ipify.org');
+      if (!ip) {
+        ip = await queryDirect('https://icanhazip.com');
+      }
+      if (ip && net.isIP(ip) && !this.directBaselineIp) {
+        this.directBaselineIp = ip;
+      }
+      this._baselineProbePromise = null;
+      return this.directBaselineIp;
+    })();
+
+    return this._baselineProbePromise;
   }
 
   async probeExternalIp() {

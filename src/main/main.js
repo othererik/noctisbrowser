@@ -58,6 +58,8 @@ app.commandLine.appendSwitch('disable-component-update');
 app.commandLine.appendSwitch('no-pings');
 app.commandLine.appendSwitch('incognito');
 app.commandLine.appendSwitch('force-webrtc-ip-handling-policy', 'disable_non_proxied_udp');
+app.commandLine.appendSwitch('webrtc-ip-handling-policy', 'disable_non_proxied_udp');
+app.commandLine.appendSwitch('enforce-webrtc-ip-permission-check');
 app.commandLine.appendSwitch('disable-webrtc-multiple-routes');
 
 // Force DNS-over-HTTPS with strict DNSSEC validation across Chromium engine
@@ -874,6 +876,17 @@ app.whenReady().then(async () => {
 
     if (typeof s.setWebRTCIPHandlingPolicy === 'function') {
       s.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
+    }
+
+    // Deny-by-Default Permission Sandbox: block unsolicited media (prevents WebRTC LAN IP exposure),
+    // geolocation, local-fonts, midi, notifications, hid, usb, serial, and idle-detection.
+    if (typeof s.setPermissionRequestHandler === 'function') {
+      s.setPermissionRequestHandler((_webContents, _permission, callback) => {
+        callback(false);
+      });
+    }
+    if (typeof s.setPermissionCheckHandler === 'function') {
+      s.setPermissionCheckHandler(() => false);
     }
 
     s.webRequest.onBeforeRequest((details, callback) => {

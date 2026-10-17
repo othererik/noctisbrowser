@@ -7,14 +7,14 @@
   // Prevent double wrapping
   if (window.__NOCTIS_SHIELD_ACTIVE__ || window.__NETSCOPE_SHIELD_ACTIVE__) {
     if (window.__NOCTIS_UPDATE_PROFILE__) {
-      window.__NOCTIS_UPDATE_PROFILE__({"name":"macOS Apple Silicon (M-Series)","os":"macOS","platform":"MacIntel","platformVersion":"15.0.0","architecture":"arm","bitness":"64","model":"","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36","appVersion":"5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36","webglVendor":"Google Inc. (Apple)","webglRenderer":"ANGLE (Apple, Apple M2 Pro, OpenGL 4.1)","hardwareConcurrency":8,"deviceMemory":8,"timezone":"America/New_York","screen":{"width":1728,"height":1117,"availWidth":1728,"availHeight":1080,"colorDepth":24,"pixelDepth":24,"devicePixelRatio":2},"presetKey":"macos-mseries","canvasNoiseMode":"paranoid","canvasNoiseSeed":1956328063,"audioNoiseMode":"paranoid","audioNoiseSeed":582351155,"letterboxing":true,"screenCaptureProtection":false,"runtimeDrift":true,"driftIntervalSec":60,"driftOnNavigation":true,"driftCount":11,"lastVariedAt":1792206211682});
+      window.__NOCTIS_UPDATE_PROFILE__({"name":"Linux Ubuntu x86_64 (AMD Radeon RX 6700)","os":"Linux","platform":"Linux x86_64","platformVersion":"6.5.0","architecture":"x86","bitness":"64","model":"","userAgent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36","appVersion":"5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36","webglVendor":"Google Inc. (AMD)","webglRenderer":"ANGLE (AMD, AMD Radeon RX 6700 XT, OpenGL 4.6)","hardwareConcurrency":12,"deviceMemory":16,"timezone":"UTC","screen":{"width":2560,"height":1440,"availWidth":2560,"availHeight":1400,"colorDepth":24,"pixelDepth":24,"devicePixelRatio":1},"presetKey":"linux-amd","canvasNoiseMode":"paranoid","canvasNoiseSeed":453691,"audioNoiseMode":"paranoid","audioNoiseSeed":891193,"letterboxing":true,"screenCaptureProtection":true,"runtimeDrift":true,"driftIntervalSec":60,"driftOnNavigation":true,"driftCount":0,"lastVariedAt":1792206674149});
     }
     return;
   }
   window.__NOCTIS_SHIELD_ACTIVE__ = true;
   window.__NETSCOPE_SHIELD_ACTIVE__ = true;
 
-  let profile = {"name":"macOS Apple Silicon (M-Series)","os":"macOS","platform":"MacIntel","platformVersion":"15.0.0","architecture":"arm","bitness":"64","model":"","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36","appVersion":"5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36","webglVendor":"Google Inc. (Apple)","webglRenderer":"ANGLE (Apple, Apple M2 Pro, OpenGL 4.1)","hardwareConcurrency":8,"deviceMemory":8,"timezone":"America/New_York","screen":{"width":1728,"height":1117,"availWidth":1728,"availHeight":1080,"colorDepth":24,"pixelDepth":24,"devicePixelRatio":2},"presetKey":"macos-mseries","canvasNoiseMode":"paranoid","canvasNoiseSeed":1956328063,"audioNoiseMode":"paranoid","audioNoiseSeed":582351155,"letterboxing":true,"screenCaptureProtection":false,"runtimeDrift":true,"driftIntervalSec":60,"driftOnNavigation":true,"driftCount":11,"lastVariedAt":1792206211682};
+  let profile = {"name":"Linux Ubuntu x86_64 (AMD Radeon RX 6700)","os":"Linux","platform":"Linux x86_64","platformVersion":"6.5.0","architecture":"x86","bitness":"64","model":"","userAgent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36","appVersion":"5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36","webglVendor":"Google Inc. (AMD)","webglRenderer":"ANGLE (AMD, AMD Radeon RX 6700 XT, OpenGL 4.6)","hardwareConcurrency":12,"deviceMemory":16,"timezone":"UTC","screen":{"width":2560,"height":1440,"availWidth":2560,"availHeight":1400,"colorDepth":24,"pixelDepth":24,"devicePixelRatio":1},"presetKey":"linux-amd","canvasNoiseMode":"paranoid","canvasNoiseSeed":453691,"audioNoiseMode":"paranoid","audioNoiseSeed":891193,"letterboxing":true,"screenCaptureProtection":true,"runtimeDrift":true,"driftIntervalSec":60,"driftOnNavigation":true,"driftCount":0,"lastVariedAt":1792206674149};
 
   // Expose bridge for in-page dynamic runtime drift updates
   try {
@@ -414,34 +414,186 @@
     window.speechSynthesis.getVoices = makeNative(() => mockVoices, 'getVoices');
   }
 
-  // 10. WebRTC SDP Candidate Filtering (Zero Local IP Leakage)
-  if (window.RTCPeerConnection) {
-    const origCreateOffer = RTCPeerConnection.prototype.createOffer;
-    RTCPeerConnection.prototype.createOffer = makeNative(async function(options) {
-      const offer = await origCreateOffer.apply(this, arguments);
-      if (offer && offer.sdp) {
-        const nl = String.fromCharCode(10);
-        offer.sdp = offer.sdp.split(nl).filter(function(line) {
-          return !line.startsWith('a=candidate:') || (!line.includes('192.168.') && !line.includes('10.') && !line.includes('172.') && !line.includes('127.0.0.1'));
-        }).join(nl);
-      }
-      return offer;
-    }, 'createOffer');
+  // 10. WebRTC STUN / ICE Candidate & SDP Leak Neutralization (Zero Local or Public IP Leakage)
+  if (window.RTCPeerConnection || window.webkitRTCPeerConnection) {
+    const OrigPeerConnection = window.RTCPeerConnection || window.webkitRTCPeerConnection;
+    const scrubSdp = function(sdp) {
+      if (!sdp || typeof sdp !== 'string') return sdp;
+      const nl = String.fromCharCode(10);
+      const cr = String.fromCharCode(13);
+      return sdp
+        .split(nl)
+        .filter(function(line) {
+          return !line.startsWith('a=candidate:') && !line.startsWith('a=extmap-allow-mixed');
+        })
+        .map(function(line) {
+          if (line.startsWith('c=IN IP4 ') || line.startsWith('c=IN IP6 ')) {
+            return 'c=IN IP4 0.0.0.0' + (line.endsWith(cr) ? cr : '');
+          }
+          return line;
+        })
+        .join(nl);
+    };
 
-    const origSetLocalDescription = RTCPeerConnection.prototype.setLocalDescription;
-    RTCPeerConnection.prototype.setLocalDescription = makeNative(function(desc) {
-      if (desc && desc.sdp) {
-        const nl = String.fromCharCode(10);
-        desc.sdp = desc.sdp.split(nl).filter(function(line) {
-          return !line.startsWith('a=candidate:') || (!line.includes('192.168.') && !line.includes('10.') && !line.includes('172.') && !line.includes('127.0.0.1'));
-        }).join(nl);
+    const wrapDescGetter = function(proto, propName) {
+      const desc = Object.getOwnPropertyDescriptor(proto, propName);
+      if (desc && typeof desc.get === 'function') {
+        Object.defineProperty(proto, propName, {
+          get: makeNative(function() {
+            const val = desc.get.apply(this, arguments);
+            if (!val) return val;
+            return {
+              type: val.type,
+              sdp: scrubSdp(val.sdp),
+              toJSON: function() {
+                return { type: val.type, sdp: scrubSdp(val.sdp) };
+              }
+            };
+          }, 'get ' + propName),
+          configurable: true,
+          enumerable: true
+        });
       }
-      return origSetLocalDescription.apply(this, arguments);
-    }, 'setLocalDescription');
+    };
+
+    if (OrigPeerConnection.prototype) {
+      wrapDescGetter(OrigPeerConnection.prototype, 'localDescription');
+      wrapDescGetter(OrigPeerConnection.prototype, 'pendingLocalDescription');
+      wrapDescGetter(OrigPeerConnection.prototype, 'currentLocalDescription');
+
+      const origCreateOffer = OrigPeerConnection.prototype.createOffer;
+      if (origCreateOffer) {
+        OrigPeerConnection.prototype.createOffer = makeNative(async function(options) {
+          const offer = await origCreateOffer.apply(this, arguments);
+          if (offer && offer.sdp) {
+            return { type: offer.type, sdp: scrubSdp(offer.sdp) };
+          }
+          return offer;
+        }, 'createOffer');
+      }
+
+      const origSetLocalDescription = OrigPeerConnection.prototype.setLocalDescription;
+      if (origSetLocalDescription) {
+        OrigPeerConnection.prototype.setLocalDescription = makeNative(function(desc) {
+          if (desc && desc.sdp) {
+            desc = { type: desc.type, sdp: scrubSdp(desc.sdp) };
+          }
+          return origSetLocalDescription.call(this, desc);
+        }, 'setLocalDescription');
+      }
+
+      const origGetStats = OrigPeerConnection.prototype.getStats;
+      if (origGetStats) {
+        OrigPeerConnection.prototype.getStats = makeNative(async function() {
+          const report = await origGetStats.apply(this, arguments);
+          const safeMap = new Map();
+          if (report && typeof report.forEach === 'function') {
+            report.forEach((val, key) => {
+              if (val && (val.type === 'local-candidate' || val.type === 'remote-candidate' || val.type === 'candidate-pair')) {
+                return;
+              }
+              safeMap.set(key, val);
+            });
+          }
+          return safeMap;
+        }, 'getStats');
+      }
+    }
+
+    const SafeRTCPeerConnection = makeNative(function(config, constraints) {
+      // Strip all external STUN/TURN iceServers to block raw UDP public IP discovery
+      const safeConfig = Object.assign({}, config || {}, { iceServers: [] });
+      const pc = new OrigPeerConnection(safeConfig, constraints);
+
+      // Block host/srflx/prflx ICE candidate events (IPv4 & IPv6)
+      const origAddEventListener = pc.addEventListener.bind(pc);
+      pc.addEventListener = makeNative(function(type, listener, options) {
+        if (type === 'icecandidate' && typeof listener === 'function') {
+          const wrapped = function(event) {
+            if (event && event.candidate && event.candidate.candidate) {
+              return;
+            }
+            return listener.call(this, event);
+          };
+          return origAddEventListener(type, wrapped, options);
+        }
+        return origAddEventListener(type, listener, options);
+      }, 'addEventListener');
+
+      let userOnIceCandidate = null;
+      try {
+        Object.defineProperty(pc, 'onicecandidate', {
+          get: () => userOnIceCandidate,
+          set: (fn) => {
+            userOnIceCandidate = typeof fn === 'function' ? fn : null;
+            origAddEventListener('icecandidate', function(event) {
+              if (event && event.candidate && event.candidate.candidate) {
+                return;
+              }
+              if (userOnIceCandidate) userOnIceCandidate.call(pc, event);
+            });
+          },
+          configurable: true,
+          enumerable: true
+        });
+      } catch (_) {}
+
+      return pc;
+    }, 'RTCPeerConnection');
+
+    SafeRTCPeerConnection.prototype = OrigPeerConnection.prototype;
+    Object.setPrototypeOf(SafeRTCPeerConnection, OrigPeerConnection);
+    window.RTCPeerConnection = SafeRTCPeerConnection;
+    if ('webkitRTCPeerConnection' in window) {
+      window.webkitRTCPeerConnection = SafeRTCPeerConnection;
+    }
+
+    // Protect against dynamic about:blank / srcdoc <iframe> bypasses (used by browserleaks & FingerprintJS)
+    if (window.HTMLIFrameElement && HTMLIFrameElement.prototype) {
+      const cwDesc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
+      if (cwDesc && typeof cwDesc.get === 'function') {
+        Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+          get: makeNative(function() {
+            const cw = cwDesc.get.apply(this, arguments);
+            if (cw) {
+              try {
+                cw.RTCPeerConnection = SafeRTCPeerConnection;
+                if ('webkitRTCPeerConnection' in cw) cw.webkitRTCPeerConnection = SafeRTCPeerConnection;
+                if (cw.Navigator && cw.Navigator.prototype) {
+                  for (const [prop, getter] of Object.entries(navProps)) {
+                    Object.defineProperty(cw.Navigator.prototype, prop, {
+                      get: getter,
+                      enumerable: true,
+                      configurable: true
+                    });
+                  }
+                }
+              } catch (_) {}
+            }
+            return cw;
+          }, 'get contentWindow'),
+          configurable: true,
+          enumerable: true
+        });
+      }
+    }
   }
 
-  // 11. Timezone & Locale Standardization
+  // 11. Timezone, Date Offset & Locale Standardization
   try {
+    const tzOffsets = {
+      'UTC': 0,
+      'Atlantic/Reykjavik': 0,
+      'Europe/London': 0,
+      'Europe/Zurich': -60,
+      'Europe/Berlin': -60,
+      'Europe/Amsterdam': -60,
+      'Europe/Stockholm': -60,
+      'America/New_York': 240,
+      'America/Chicago': 300,
+      'America/Denver': 360,
+      'America/Los_Angeles': 420
+    };
     const origResolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
     Intl.DateTimeFormat.prototype.resolvedOptions = makeNative(function() {
       const opts = origResolvedOptions.apply(this, arguments);
@@ -451,6 +603,11 @@
         locale: 'en-US'
       };
     }, 'resolvedOptions');
+
+    Date.prototype.getTimezoneOffset = makeNative(function() {
+      const tz = profile.timezone || 'America/New_York';
+      return tzOffsets[tz] !== undefined ? tzOffsets[tz] : 0;
+    }, 'getTimezoneOffset');
   } catch (_) {}
 
   // 12. Standard Genuine Chrome Plugins & MimeTypes

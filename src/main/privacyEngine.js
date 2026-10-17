@@ -923,6 +923,23 @@ class PrivacyEngine {
           return origSetLocalDescription.call(this, desc);
         }, 'setLocalDescription');
       }
+
+      const origGetStats = OrigPeerConnection.prototype.getStats;
+      if (origGetStats) {
+        OrigPeerConnection.prototype.getStats = makeNative(async function() {
+          const report = await origGetStats.apply(this, arguments);
+          const safeMap = new Map();
+          if (report && typeof report.forEach === 'function') {
+            report.forEach((val, key) => {
+              if (val && (val.type === 'local-candidate' || val.type === 'remote-candidate' || val.type === 'candidate-pair')) {
+                return;
+              }
+              safeMap.set(key, val);
+            });
+          }
+          return safeMap;
+        }, 'getStats');
+      }
     }
 
     const SafeRTCPeerConnection = makeNative(function(config, constraints) {
@@ -972,10 +989,53 @@ class PrivacyEngine {
     if ('webkitRTCPeerConnection' in window) {
       window.webkitRTCPeerConnection = SafeRTCPeerConnection;
     }
+
+    // Protect against dynamic about:blank / srcdoc <iframe> bypasses (used by browserleaks & FingerprintJS)
+    if (window.HTMLIFrameElement && HTMLIFrameElement.prototype) {
+      const cwDesc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
+      if (cwDesc && typeof cwDesc.get === 'function') {
+        Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+          get: makeNative(function() {
+            const cw = cwDesc.get.apply(this, arguments);
+            if (cw) {
+              try {
+                cw.RTCPeerConnection = SafeRTCPeerConnection;
+                if ('webkitRTCPeerConnection' in cw) cw.webkitRTCPeerConnection = SafeRTCPeerConnection;
+                if (cw.Navigator && cw.Navigator.prototype) {
+                  for (const [prop, getter] of Object.entries(navProps)) {
+                    Object.defineProperty(cw.Navigator.prototype, prop, {
+                      get: getter,
+                      enumerable: true,
+                      configurable: true
+                    });
+                  }
+                }
+              } catch (_) {}
+            }
+            return cw;
+          }, 'get contentWindow'),
+          configurable: true,
+          enumerable: true
+        });
+      }
+    }
   }
 
-  // 11. Timezone & Locale Standardization
+  // 11. Timezone, Date Offset & Locale Standardization
   try {
+    const tzOffsets = {
+      'UTC': 0,
+      'Atlantic/Reykjavik': 0,
+      'Europe/London': 0,
+      'Europe/Zurich': -60,
+      'Europe/Berlin': -60,
+      'Europe/Amsterdam': -60,
+      'Europe/Stockholm': -60,
+      'America/New_York': 240,
+      'America/Chicago': 300,
+      'America/Denver': 360,
+      'America/Los_Angeles': 420
+    };
     const origResolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
     Intl.DateTimeFormat.prototype.resolvedOptions = makeNative(function() {
       const opts = origResolvedOptions.apply(this, arguments);
@@ -985,6 +1045,11 @@ class PrivacyEngine {
         locale: 'en-US'
       };
     }, 'resolvedOptions');
+
+    Date.prototype.getTimezoneOffset = makeNative(function() {
+      const tz = profile.timezone || 'America/New_York';
+      return tzOffsets[tz] !== undefined ? tzOffsets[tz] : 0;
+    }, 'getTimezoneOffset');
   } catch (_) {}
 
   // 12. Standard Genuine Chrome Plugins & MimeTypes
