@@ -310,8 +310,14 @@ function isNewTabInputEvent(input) {
   return Boolean(hasModifier && !input.alt && !input.shift && input.key && input.key.toLowerCase() === 't');
 }
 
-// Intercept all window opening and shortcut inputs across all webviews and child contexts
+// Intercept all window opening, WebRTC UDP policy, and shortcut inputs across all webviews and child contexts
 app.on('web-contents-created', (event, contents) => {
+  try {
+    if (typeof contents.setWebRTCIPHandlingPolicy === 'function') {
+      contents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
+    }
+  } catch (_) {}
+
   contents.on('before-input-event', (e, input) => {
     if (isNewTabInputEvent(input)) {
       e.preventDefault();

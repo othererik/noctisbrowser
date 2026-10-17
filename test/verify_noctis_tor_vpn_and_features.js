@@ -406,6 +406,27 @@ async function runTests() {
             const est = navigator.storage && navigator.storage.estimate ? await navigator.storage.estimate() : null;
             const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
             const kbd = navigator.keyboard && navigator.keyboard.getLayoutMap ? await navigator.keyboard.getLayoutMap() : null;
+
+            // Live WebRTC STUN / ICE leak probe (same vector as browserleaks.com/ip)
+            const webrtcLeaks = [];
+            let localSdp = '';
+            if (window.RTCPeerConnection) {
+              try {
+                const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                pc.createDataChannel('probe');
+                pc.onicecandidate = (e) => {
+                  if (e && e.candidate && e.candidate.candidate) {
+                    webrtcLeaks.push(e.candidate.candidate);
+                  }
+                };
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                await new Promise(r => setTimeout(r, 400));
+                localSdp = pc.localDescription ? pc.localDescription.sdp : '';
+                pc.close();
+              } catch (_) {}
+            }
+
             return {
               noctisShield: Boolean(window.__NOCTIS_SHIELD_ACTIVE__),
               innerWidth: window.innerWidth,
@@ -418,7 +439,9 @@ async function runTests() {
               gyroUndefined: window.Gyroscope === undefined,
               kbdQ: kbd ? kbd.get('KeyQ') : null,
               hdrMatch: window.matchMedia('(dynamic-range: high)').matches,
-              p3Match: window.matchMedia('(color-gamut: p3)').matches
+              p3Match: window.matchMedia('(color-gamut: p3)').matches,
+              webrtcLeaksCount: webrtcLeaks.length,
+              sdpHasCandidate: localSdp.includes('a=candidate:')
             };
           })()
         \`);
@@ -437,8 +460,10 @@ async function runTests() {
   assert.strictEqual(guestChecks.kbdQ, 'q', 'Keyboard layout masked to standardized US QWERTY');
   assert.strictEqual(guestChecks.hdrMatch, false, 'HDR display media query normalized');
   assert.strictEqual(guestChecks.p3Match, false, 'P3 wide gamut display media query normalized');
+  assert.strictEqual(guestChecks.webrtcLeaksCount, 0, 'WebRTC must emit zero ICE candidate IP leaks');
+  assert.strictEqual(guestChecks.sdpHasCandidate, false, 'WebRTC localDescription.sdp must contain zero a=candidate lines');
 
-  console.log('   ✔ Guest webview Letterboxing, Storage Quota, Sensors, Gamepads, Keyboard & Display defenses verified.');
+  console.log('   ✔ Guest webview Letterboxing, WebRTC STUN/ICE Leak Shield, Storage Quota, Sensors, Gamepads & Display verified.');
 
   torVpnManager.shutdown();
   try { fs.rmSync(testEphemeralDir, { recursive: true, force: true }); } catch (_) {}

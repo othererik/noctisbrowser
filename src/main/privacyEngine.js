@@ -856,30 +856,122 @@ class PrivacyEngine {
     window.speechSynthesis.getVoices = makeNative(() => mockVoices, 'getVoices');
   }
 
-  // 10. WebRTC SDP Candidate Filtering (Zero Local IP Leakage)
-  if (window.RTCPeerConnection) {
-    const origCreateOffer = RTCPeerConnection.prototype.createOffer;
-    RTCPeerConnection.prototype.createOffer = makeNative(async function(options) {
-      const offer = await origCreateOffer.apply(this, arguments);
-      if (offer && offer.sdp) {
-        const nl = String.fromCharCode(10);
-        offer.sdp = offer.sdp.split(nl).filter(function(line) {
-          return !line.startsWith('a=candidate:') || (!line.includes('192.168.') && !line.includes('10.') && !line.includes('172.') && !line.includes('127.0.0.1'));
-        }).join(nl);
-      }
-      return offer;
-    }, 'createOffer');
+  // 10. WebRTC STUN / ICE Candidate & SDP Leak Neutralization (Zero Local or Public IP Leakage)
+  if (window.RTCPeerConnection || window.webkitRTCPeerConnection) {
+    const OrigPeerConnection = window.RTCPeerConnection || window.webkitRTCPeerConnection;
+    const scrubSdp = function(sdp) {
+      if (!sdp || typeof sdp !== 'string') return sdp;
+      const nl = String.fromCharCode(10);
+      const cr = String.fromCharCode(13);
+      return sdp
+        .split(nl)
+        .filter(function(line) {
+          return !line.startsWith('a=candidate:') && !line.startsWith('a=extmap-allow-mixed');
+        })
+        .map(function(line) {
+          if (line.startsWith('c=IN IP4 ') || line.startsWith('c=IN IP6 ')) {
+            return 'c=IN IP4 0.0.0.0' + (line.endsWith(cr) ? cr : '');
+          }
+          return line;
+        })
+        .join(nl);
+    };
 
-    const origSetLocalDescription = RTCPeerConnection.prototype.setLocalDescription;
-    RTCPeerConnection.prototype.setLocalDescription = makeNative(function(desc) {
-      if (desc && desc.sdp) {
-        const nl = String.fromCharCode(10);
-        desc.sdp = desc.sdp.split(nl).filter(function(line) {
-          return !line.startsWith('a=candidate:') || (!line.includes('192.168.') && !line.includes('10.') && !line.includes('172.') && !line.includes('127.0.0.1'));
-        }).join(nl);
+    const wrapDescGetter = function(proto, propName) {
+      const desc = Object.getOwnPropertyDescriptor(proto, propName);
+      if (desc && typeof desc.get === 'function') {
+        Object.defineProperty(proto, propName, {
+          get: makeNative(function() {
+            const val = desc.get.apply(this, arguments);
+            if (!val) return val;
+            return {
+              type: val.type,
+              sdp: scrubSdp(val.sdp),
+              toJSON: function() {
+                return { type: val.type, sdp: scrubSdp(val.sdp) };
+              }
+            };
+          }, 'get ' + propName),
+          configurable: true,
+          enumerable: true
+        });
       }
-      return origSetLocalDescription.apply(this, arguments);
-    }, 'setLocalDescription');
+    };
+
+    if (OrigPeerConnection.prototype) {
+      wrapDescGetter(OrigPeerConnection.prototype, 'localDescription');
+      wrapDescGetter(OrigPeerConnection.prototype, 'pendingLocalDescription');
+      wrapDescGetter(OrigPeerConnection.prototype, 'currentLocalDescription');
+
+      const origCreateOffer = OrigPeerConnection.prototype.createOffer;
+      if (origCreateOffer) {
+        OrigPeerConnection.prototype.createOffer = makeNative(async function(options) {
+          const offer = await origCreateOffer.apply(this, arguments);
+          if (offer && offer.sdp) {
+            return { type: offer.type, sdp: scrubSdp(offer.sdp) };
+          }
+          return offer;
+        }, 'createOffer');
+      }
+
+      const origSetLocalDescription = OrigPeerConnection.prototype.setLocalDescription;
+      if (origSetLocalDescription) {
+        OrigPeerConnection.prototype.setLocalDescription = makeNative(function(desc) {
+          if (desc && desc.sdp) {
+            desc = { type: desc.type, sdp: scrubSdp(desc.sdp) };
+          }
+          return origSetLocalDescription.call(this, desc);
+        }, 'setLocalDescription');
+      }
+    }
+
+    const SafeRTCPeerConnection = makeNative(function(config, constraints) {
+      // Strip all external STUN/TURN iceServers to block raw UDP public IP discovery
+      const safeConfig = Object.assign({}, config || {}, { iceServers: [] });
+      const pc = new OrigPeerConnection(safeConfig, constraints);
+
+      // Block host/srflx/prflx ICE candidate events (IPv4 & IPv6)
+      const origAddEventListener = pc.addEventListener.bind(pc);
+      pc.addEventListener = makeNative(function(type, listener, options) {
+        if (type === 'icecandidate' && typeof listener === 'function') {
+          const wrapped = function(event) {
+            if (event && event.candidate && event.candidate.candidate) {
+              return;
+            }
+            return listener.call(this, event);
+          };
+          return origAddEventListener(type, wrapped, options);
+        }
+        return origAddEventListener(type, listener, options);
+      }, 'addEventListener');
+
+      let userOnIceCandidate = null;
+      try {
+        Object.defineProperty(pc, 'onicecandidate', {
+          get: () => userOnIceCandidate,
+          set: (fn) => {
+            userOnIceCandidate = typeof fn === 'function' ? fn : null;
+            origAddEventListener('icecandidate', function(event) {
+              if (event && event.candidate && event.candidate.candidate) {
+                return;
+              }
+              if (userOnIceCandidate) userOnIceCandidate.call(pc, event);
+            });
+          },
+          configurable: true,
+          enumerable: true
+        });
+      } catch (_) {}
+
+      return pc;
+    }, 'RTCPeerConnection');
+
+    SafeRTCPeerConnection.prototype = OrigPeerConnection.prototype;
+    Object.setPrototypeOf(SafeRTCPeerConnection, OrigPeerConnection);
+    window.RTCPeerConnection = SafeRTCPeerConnection;
+    if ('webkitRTCPeerConnection' in window) {
+      window.webkitRTCPeerConnection = SafeRTCPeerConnection;
+    }
   }
 
   // 11. Timezone & Locale Standardization
