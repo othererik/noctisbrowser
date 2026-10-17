@@ -254,32 +254,38 @@
               </div>
             </div>
 
-            <!-- Opt-In Community Blocklist Feeds Card -->
+            <!-- Default-Loaded Community Blocklist Feeds Card -->
             <div class="privacy-shield-card" style="border-color: rgba(99, 102, 241, 0.35);">
               <div class="shield-card-header">
                 <div class="shield-card-title">
-                  <span>Community Filter Feeds (Opt-In)</span>
+                  <span>Community Filter Feeds (Default Loaded)</span>
                 </div>
-                <span class="feed-badge-pill" id="feed-active-badge">Pre-loaded</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span class="feed-badge-pill" id="feed-active-badge" style="color: #34d399; background: rgba(52, 211, 153, 0.15); border-color: rgba(52, 211, 153, 0.3);">Loaded by Default</span>
+                  <label class="toggle-switch" title="Load Community Filter Feeds by Default (Uncheck to unload community feeds)">
+                    <input type="checkbox" id="toggle-community-feeds" checked />
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
               </div>
               <div class="shield-card-body">
                 <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4; margin-bottom: 4px;">
-                  NoctisBrowser never pings external servers automatically. Opt-in below to fetch fresh community blocklist feeds into ephemeral memory.
+                  Community ad &amp; tracker filter feeds are pre-loaded into RAM by default to enforce our strict deny-by-default stance. You can update/switch feeds or unload them at any time.
                 </div>
                 <div class="shield-meta-row">
                   <span>Active List:</span>
-                  <span style="color: var(--accent-blue); font-family: var(--font-mono); font-size: 11px;" id="feed-active-name">Built-in Ad &amp; Tracker Shield</span>
+                  <span style="color: var(--accent-blue); font-family: var(--font-mono); font-size: 11px;" id="feed-active-name">Peter Lowe's Ad &amp; Tracking Servers (Default)</span>
                 </div>
                 <div class="shield-meta-row">
                   <span>Protected Hosts in RAM:</span>
-                  <span style="color: var(--text-main); font-family: var(--font-mono); font-size: 11px;" id="feed-domains-count">80+ Core Networks</span>
+                  <span style="color: var(--text-main); font-family: var(--font-mono); font-size: 11px;" id="feed-domains-count">3,600+ Hosts in RAM</span>
                 </div>
 
                 <!-- Feed Selector & Trigger -->
                 <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">
                   <label style="font-size: 11px; font-weight: 600; color: var(--text-muted);">Select Community Feed:</label>
                   <select id="select-blocklist-feed" class="feed-select">
-                    <option value="peter_lowe" selected>Peter Lowe's Adservers (pgl.yoyo.org) - Recommended</option>
+                    <option value="peter_lowe" selected>Peter Lowe's Adservers (pgl.yoyo.org) - Default Loaded</option>
                     <option value="steven_black">StevenBlack Unified Hosts (~60,000 domains)</option>
                     <option value="adguard_dns">AdGuard DNS Filter (~40,000 domains)</option>
                     <option value="custom">Custom Feed URL...</option>
@@ -289,10 +295,13 @@
 
                   <div style="display: flex; gap: 6px; margin-top: 4px;">
                     <button class="btn-fetch-feed" id="btn-fetch-feed" style="flex: 1;">
-                      <span id="btn-fetch-text">Update Blocklist (Opt-In)</span>
+                      <span id="btn-fetch-text">Load / Update Feed</span>
                     </button>
-                    <button class="btn-reset-feed" id="btn-reset-feed" title="Revert to built-in clean list">
-                      Reset
+                    <button class="btn-reset-feed" id="btn-unload-feed" title="Unload community filter feeds from memory (keep only core built-in shield)">
+                      Unload Feeds
+                    </button>
+                    <button class="btn-reset-feed" id="btn-reset-feed" title="Restore default pre-loaded community filter feed">
+                      Default
                     </button>
                   </div>
                   <div id="feed-feedback-msg" class="feed-feedback-msg" style="display: none;"></div>

@@ -445,6 +445,30 @@ async function runTests() {
               } catch (_) {}
             }
 
+            // Verify Canvas toDataURL (even on transparent canvas) & AudioBuffer [4500..5000] slice change when seed rotates
+            const c1 = document.createElement('canvas');
+            c1.width = 16; c1.height = 16;
+            const dataUrlSeedA = c1.toDataURL();
+
+            const ac1 = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 6000, 44100);
+            const osc1 = ac1.createOscillator();
+            osc1.connect(ac1.destination);
+            osc1.start(0);
+            const buf1 = await ac1.startRendering();
+            const audioSumA = buf1.getChannelData(0).slice(4500, 5000).reduce((a, b) => a + Math.abs(b), 0);
+
+            window.__NOCTIS_UPDATE_PROFILE__({ canvasNoiseSeed: 991122, audioNoiseSeed: 883344 });
+            const c2 = document.createElement('canvas');
+            c2.width = 16; c2.height = 16;
+            const dataUrlSeedB = c2.toDataURL();
+
+            const ac2 = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 6000, 44100);
+            const osc2 = ac2.createOscillator();
+            osc2.connect(ac2.destination);
+            osc2.start(0);
+            const buf2 = await ac2.startRendering();
+            const audioSumB = buf2.getChannelData(0).slice(4500, 5000).reduce((a, b) => a + Math.abs(b), 0);
+
             return {
               noctisShield: Boolean(window.__NOCTIS_SHIELD_ACTIVE__),
               innerWidth: window.innerWidth,
@@ -462,7 +486,9 @@ async function runTests() {
               sdpHasCandidate: localSdp.includes('a=candidate:'),
               statsCandidateCount,
               iframeShielded,
-              tzOffset: new Date().getTimezoneOffset()
+              tzOffset: new Date().getTimezoneOffset(),
+              canvasSeedRotatedDiffers: dataUrlSeedA !== dataUrlSeedB,
+              audioSliceRotatedDiffers: audioSumA !== audioSumB
             };
           })()
         \`);
@@ -486,8 +512,10 @@ async function runTests() {
   assert.strictEqual(guestChecks.statsCandidateCount, 0, 'WebRTC getStats() must expose zero local/remote candidate IPs');
   assert.strictEqual(guestChecks.iframeShielded, true, 'Dynamic about:blank iframe contentWindow must be shielded');
   assert.strictEqual(guestChecks.tzOffset, 0, 'Date.getTimezoneOffset() must match active Linux UTC profile (0)');
+  assert.strictEqual(guestChecks.canvasSeedRotatedDiffers, true, 'Canvas toDataURL() must produce distinct hashes across seeds/origins even on transparent regions');
+  assert.strictEqual(guestChecks.audioSliceRotatedDiffers, true, 'AudioBuffer getChannelData(0).slice(4500, 5000) must produce distinct sums across seeds/origins');
 
-  console.log('   ✔ Guest webview Letterboxing, WebRTC STUN/ICE/getStats/Iframe Shield, Timezone, Storage Quota, Sensors & Display verified.');
+  console.log('   ✔ Guest webview Letterboxing, WebRTC STUN/ICE/getStats/Iframe Shield, Timezone, Canvas/Audio Farbling, Storage Quota, Sensors & Display verified.');
 
   torVpnManager.shutdown();
   try { fs.rmSync(testEphemeralDir, { recursive: true, force: true }); } catch (_) {}

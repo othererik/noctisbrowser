@@ -7,14 +7,14 @@
   // Prevent double wrapping
   if (window.__NOCTIS_SHIELD_ACTIVE__ || window.__NETSCOPE_SHIELD_ACTIVE__) {
     if (window.__NOCTIS_UPDATE_PROFILE__) {
-      window.__NOCTIS_UPDATE_PROFILE__({"name":"Linux Ubuntu x86_64 (AMD Radeon RX 6700)","os":"Linux","platform":"Linux x86_64","platformVersion":"6.5.0","architecture":"x86","bitness":"64","model":"","userAgent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36","appVersion":"5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36","webglVendor":"Google Inc. (AMD)","webglRenderer":"ANGLE (AMD, AMD Radeon RX 6700 XT, OpenGL 4.6)","hardwareConcurrency":12,"deviceMemory":16,"timezone":"UTC","screen":{"width":2560,"height":1440,"availWidth":2560,"availHeight":1400,"colorDepth":24,"pixelDepth":24,"devicePixelRatio":1},"presetKey":"linux-amd","canvasNoiseMode":"paranoid","canvasNoiseSeed":453691,"audioNoiseMode":"paranoid","audioNoiseSeed":891193,"letterboxing":true,"screenCaptureProtection":true,"runtimeDrift":true,"driftIntervalSec":60,"driftOnNavigation":true,"driftCount":0,"lastVariedAt":1792206674149});
+      window.__NOCTIS_UPDATE_PROFILE__({"name":"macOS Apple Silicon (M-Series)","os":"macOS","platform":"MacIntel","platformVersion":"15.0.0","architecture":"arm","bitness":"64","model":"","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36","appVersion":"5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36","webglVendor":"Google Inc. (Apple)","webglRenderer":"ANGLE (Apple, Apple M2 Pro, OpenGL 4.1)","hardwareConcurrency":8,"deviceMemory":8,"timezone":"America/New_York","screen":{"width":1728,"height":1117,"availWidth":1728,"availHeight":1080,"colorDepth":24,"pixelDepth":24,"devicePixelRatio":2},"presetKey":"macos-mseries","canvasNoiseMode":"paranoid","canvasNoiseSeed":1817268017,"audioNoiseMode":"paranoid","audioNoiseSeed":1027741958,"letterboxing":true,"screenCaptureProtection":false,"runtimeDrift":true,"driftIntervalSec":60,"driftOnNavigation":true,"driftCount":1,"lastVariedAt":1792209289221});
     }
     return;
   }
   window.__NOCTIS_SHIELD_ACTIVE__ = true;
   window.__NETSCOPE_SHIELD_ACTIVE__ = true;
 
-  let profile = {"name":"Linux Ubuntu x86_64 (AMD Radeon RX 6700)","os":"Linux","platform":"Linux x86_64","platformVersion":"6.5.0","architecture":"x86","bitness":"64","model":"","userAgent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36","appVersion":"5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36","webglVendor":"Google Inc. (AMD)","webglRenderer":"ANGLE (AMD, AMD Radeon RX 6700 XT, OpenGL 4.6)","hardwareConcurrency":12,"deviceMemory":16,"timezone":"UTC","screen":{"width":2560,"height":1440,"availWidth":2560,"availHeight":1400,"colorDepth":24,"pixelDepth":24,"devicePixelRatio":1},"presetKey":"linux-amd","canvasNoiseMode":"paranoid","canvasNoiseSeed":453691,"audioNoiseMode":"paranoid","audioNoiseSeed":891193,"letterboxing":true,"screenCaptureProtection":true,"runtimeDrift":true,"driftIntervalSec":60,"driftOnNavigation":true,"driftCount":0,"lastVariedAt":1792206674149};
+  let profile = {"name":"macOS Apple Silicon (M-Series)","os":"macOS","platform":"MacIntel","platformVersion":"15.0.0","architecture":"arm","bitness":"64","model":"","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36","appVersion":"5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36","webglVendor":"Google Inc. (Apple)","webglRenderer":"ANGLE (Apple, Apple M2 Pro, OpenGL 4.1)","hardwareConcurrency":8,"deviceMemory":8,"timezone":"America/New_York","screen":{"width":1728,"height":1117,"availWidth":1728,"availHeight":1080,"colorDepth":24,"pixelDepth":24,"devicePixelRatio":2},"presetKey":"macos-mseries","canvasNoiseMode":"paranoid","canvasNoiseSeed":1817268017,"audioNoiseMode":"paranoid","audioNoiseSeed":1027741958,"letterboxing":true,"screenCaptureProtection":false,"runtimeDrift":true,"driftIntervalSec":60,"driftOnNavigation":true,"driftCount":1,"lastVariedAt":1792209289221};
 
   // Expose bridge for in-page dynamic runtime drift updates
   try {
@@ -57,7 +57,33 @@
     makeNative(Function.prototype.toString, 'toString');
   } catch (_) {}
 
-  // 1. Mask Navigator Identity & Hardware Properties
+  // First-Party Domain Isolation (Per-Origin Farbling Seed, Brave/Tor style):
+  // Deterministic within the same first-party hostname so dual-run checks match,
+  // but distinct across different first-party origins (e.g., firstpartysimulator.org vs coveryourtracks.eff.org).
+  const getDomainHash = () => {
+    try {
+      const loc = window.location;
+      if (!loc || !loc.hostname || loc.protocol === 'file:') return 0;
+      const host = String(loc.hostname).toLowerCase();
+      if (!host || host === 'localhost' || host === '127.0.0.1') return 0;
+      let h = 2166136261 >>> 0;
+      for (let i = 0; i < host.length; i++) {
+        h ^= host.charCodeAt(i);
+        h = Math.imul(h, 16777619) >>> 0;
+      }
+      return (h >>> 0) || 1;
+    } catch (_) {
+      return 0;
+    }
+  };
+
+  const getDomainSeed = (baseSeed) => {
+    const b = Number(baseSeed || 42) >>> 0;
+    const dh = getDomainHash();
+    return ((b ^ dh) >>> 0) || b || 42;
+  };
+
+  // 1. Mask Navigator Identity & Hardware Properties (with Per-Origin Farbling on remote origins)
   const navProps = {
     userAgent: () => profile.userAgent,
     appVersion: () => profile.appVersion,
@@ -67,7 +93,15 @@
     productSub: () => '20030107',
     oscpu: () => undefined,
     cpuClass: () => undefined,
-    hardwareConcurrency: () => Number(profile.hardwareConcurrency || 8),
+    hardwareConcurrency: () => {
+      const base = Number(profile.hardwareConcurrency || 8);
+      const dh = getDomainHash();
+      if (dh && profile.canvasNoiseMode !== 'off') {
+        const corePool = [4, 6, 8, 10, 12, 14, 16, 20, 24];
+        return corePool[(dh + base) % corePool.length];
+      }
+      return base;
+    },
     deviceMemory: () => Number(profile.deviceMemory || 8),
     webdriver: () => false,
     maxTouchPoints: () => 0,
@@ -86,6 +120,52 @@
       });
     } catch (_) {}
   }
+
+  // 1b. Per-Origin Farbling for navigator.plugins (Defeats cross-site Plugin enumeration correlation)
+  try {
+    const origPluginsDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'plugins');
+    if (origPluginsDesc && typeof origPluginsDesc.get === 'function') {
+      const wrapPlugin = (plugin, tag) => new Proxy(plugin, {
+        get(target, prop) {
+          if (prop === 'description') {
+            const origDesc = Reflect.get(target, 'description', target) || 'Portable Document Format';
+            return tag ? (origDesc + ' #' + tag) : origDesc;
+          }
+          const val = Reflect.get(target, prop, target);
+          return typeof val === 'function' ? val.bind(target) : val;
+        }
+      });
+
+      Object.defineProperty(Navigator.prototype, 'plugins', {
+        get: makeNative(function() {
+          const rawPlugins = origPluginsDesc.get.call(this);
+          const dh = getDomainHash();
+          if (!rawPlugins || !dh || profile.canvasNoiseMode === 'off') {
+            return rawPlugins;
+          }
+          const tag = ((getDomainSeed(profile.canvasNoiseSeed) % 997) + 1);
+          return new Proxy(rawPlugins, {
+            get(target, prop) {
+              if (typeof prop === 'string' && /^\d+$/.test(prop)) {
+                const entry = target[Number(prop)];
+                return entry ? wrapPlugin(entry, tag) : entry;
+              }
+              if (prop === 'item') {
+                return function(idx) {
+                  const entry = target.item(idx);
+                  return entry ? wrapPlugin(entry, tag) : entry;
+                };
+              }
+              const val = Reflect.get(target, prop, target);
+              return typeof val === 'function' ? val.bind(target) : val;
+            }
+          });
+        }, 'get plugins'),
+        enumerable: true,
+        configurable: true
+      });
+    }
+  } catch (_) {}
 
   // 2. Client Hints API (navigator.userAgentData)
   if ('userAgentData' in Navigator.prototype) {
@@ -192,8 +272,8 @@
         origReadPixels.apply(this, arguments);
         const mode = profile.canvasNoiseMode;
         if (mode !== 'off' && pixels && pixels.length > 0) {
-          const seed = Number(profile.canvasNoiseSeed || 42);
-          pixels[0] = Math.max(0, Math.min(255, pixels[0] ^ (seed & 1)));
+          const seed = getDomainSeed(profile.canvasNoiseSeed || 42);
+          pixels[0] = Math.max(0, Math.min(255, pixels[0] ^ ((seed & 0x0f) || 1)));
         }
       }, 'readPixels');
     }
@@ -202,29 +282,33 @@
   if (window.WebGLRenderingContext) spoofWebGL(WebGLRenderingContext.prototype);
   if (window.WebGL2RenderingContext) spoofWebGL(WebGL2RenderingContext.prototype);
 
-  // 6. Paranoid Canvas & Font Fingerprint Neutralization
+  // 6. Paranoid Canvas & Font Fingerprint Neutralization (with Per-Origin Farbling & Premultiplied-Alpha Safe Patch)
   const getCanvasJitter = () => {
     const mode = profile.canvasNoiseMode;
     if (mode === 'off') return 0;
-    const seed = Number(profile.canvasNoiseSeed || 42);
-    if (mode === 'subtle') return (seed & 1) ? 1 : 0;
-    if (mode === 'extreme') return ((seed % 7) - 3);
-    return ((seed % 3) === 0 ? 1 : ((seed % 3) === 1 ? -1 : 0));
+    const seed = getDomainSeed(profile.canvasNoiseSeed || 42);
+    if (mode === 'subtle') return (seed & 1) ? 1 : -1;
+    if (mode === 'extreme') return ((seed % 7) - 3) || 2;
+    return ((seed % 5) - 2) || 1;
   };
 
-  if (window.CanvasRenderingContext2D) {
-    const origGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+  const origGetContext = window.HTMLCanvasElement ? HTMLCanvasElement.prototype.getContext : null;
+  const origGetImageData = window.CanvasRenderingContext2D ? CanvasRenderingContext2D.prototype.getImageData : null;
+  const origPutImageData = window.CanvasRenderingContext2D ? CanvasRenderingContext2D.prototype.putImageData : null;
+
+  if (window.CanvasRenderingContext2D && origGetImageData) {
     CanvasRenderingContext2D.prototype.getImageData = makeNative(function(sx, sy, sw, sh) {
       const imageData = origGetImageData.apply(this, arguments);
       const mode = profile.canvasNoiseMode;
       if (mode !== 'off' && imageData && imageData.data && imageData.data.length >= 8) {
         const d = imageData.data;
-        const seed = Number(profile.canvasNoiseSeed || 42);
+        const seed = getDomainSeed(profile.canvasNoiseSeed || 42);
         const jitter = getCanvasJitter();
-        d[0] = Math.max(0, Math.min(255, d[0] + jitter));
-        d[1] = Math.max(0, Math.min(255, d[1] - jitter));
-        d[2] = Math.max(0, Math.min(255, d[2] + ((seed % 2) ? 1 : 0)));
-        d[4] = Math.max(0, Math.min(255, d[4] - jitter));
+        d[0] = (d[0] + jitter + (seed & 0x07) + 1) & 0xff;
+        d[1] = (d[1] + ((seed >> 3) & 0x07) + 1) & 0xff;
+        d[2] = (d[2] + ((seed >> 6) & 0x07) + 1) & 0xff;
+        d[3] = d[3] === 0 ? ((seed % 7) + 1) : d[3];
+        d[4] = (d[4] + ((seed >> 9) & 0x07) + 1) & 0xff;
       }
       return imageData;
     }, 'getImageData');
@@ -236,8 +320,8 @@
         const metrics = origMeasureText.apply(this, arguments);
         const mode = profile.canvasNoiseMode;
         if (mode !== 'off' && metrics && typeof metrics.width === 'number') {
-          const seed = Number(profile.canvasNoiseSeed || 42);
-          const delta = ((seed % 5) - 2) * 0.0001;
+          const seed = getDomainSeed(profile.canvasNoiseSeed || 42);
+          const delta = (((seed % 11) - 5) || 1) * 0.0001;
           const perturbedWidth = metrics.width + delta;
           try {
             return new Proxy(metrics, {
@@ -262,8 +346,8 @@
       const rect = origGetBoundingClientRect.apply(this, arguments);
       const mode = profile.canvasNoiseMode;
       if (mode !== 'off' && rect) {
-        const seed = Number(profile.canvasNoiseSeed || 42);
-        const delta = ((seed % 7) - 3) * 0.00005;
+        const seed = getDomainSeed(profile.canvasNoiseSeed || 42);
+        const delta = (((seed % 9) - 4) || 1) * 0.00005;
         return new DOMRect(rect.x, rect.y, rect.width + delta, rect.height + delta);
       }
       return rect;
@@ -272,17 +356,51 @@
 
   if (window.HTMLCanvasElement) {
     const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+    const createFarbledCanvasClone = (srcCanvas) => {
+      try {
+        const w = Math.max(1, srcCanvas.width || 1);
+        const h = Math.max(1, srcCanvas.height || 1);
+        const tmp = document.createElement('canvas');
+        tmp.width = w;
+        tmp.height = h;
+        const tmpCtx = origGetContext ? origGetContext.call(tmp, '2d') : tmp.getContext('2d');
+        if (!tmpCtx) return null;
+        try {
+          tmpCtx.drawImage(srcCanvas, 0, 0);
+        } catch (_) {}
+        const patchW = Math.min(2, w);
+        const patch = origGetImageData
+          ? origGetImageData.call(tmpCtx, 0, 0, patchW, 1)
+          : tmpCtx.getImageData(0, 0, patchW, 1);
+        const seed = getDomainSeed(profile.canvasNoiseSeed || 42);
+        patch.data[0] = (patch.data[0] ^ ((seed & 0xff) || 1)) & 0xff;
+        patch.data[1] = (patch.data[1] ^ (((seed >>> 8) & 0xff) || 3)) & 0xff;
+        patch.data[2] = (patch.data[2] ^ (((seed >>> 16) & 0xff) || 7)) & 0xff;
+        // Ensure non-zero alpha so premultiplied alpha PNG serialization never zeroes out RGB channels
+        patch.data[3] = 240 + (seed % 15);
+        if (patch.data.length >= 8) {
+          patch.data[4] = (patch.data[4] ^ (((seed >>> 4) & 0xff) || 5)) & 0xff;
+          patch.data[5] = (patch.data[5] ^ (((seed >>> 12) & 0xff) || 9)) & 0xff;
+          patch.data[6] = (patch.data[6] ^ (((seed >>> 20) & 0xff) || 11)) & 0xff;
+          patch.data[7] = 240 + ((seed >>> 3) % 15);
+        }
+        if (origPutImageData) {
+          origPutImageData.call(tmpCtx, patch, 0, 0);
+        } else {
+          tmpCtx.putImageData(patch, 0, 0);
+        }
+        return tmp;
+      } catch (_) {
+        return null;
+      }
+    };
+
     HTMLCanvasElement.prototype.toDataURL = makeNative(function() {
       const mode = profile.canvasNoiseMode;
       if (mode !== 'off') {
-        const ctx = this.getContext('2d');
-        if (ctx) {
-          try {
-            const seed = Number(profile.canvasNoiseSeed || 42);
-            const imgData = ctx.getImageData(0, 0, 1, 1);
-            imgData.data[0] = (imgData.data[0] + (seed % 2 === 0 ? 1 : 0)) % 256;
-            ctx.putImageData(imgData, 0, 0);
-          } catch (_) {}
+        const clone = createFarbledCanvasClone(this);
+        if (clone) {
+          return origToDataURL.apply(clone, arguments);
         }
       }
       return origToDataURL.apply(this, arguments);
@@ -293,14 +411,9 @@
       HTMLCanvasElement.prototype.toBlob = makeNative(function(callback, type, quality) {
         const mode = profile.canvasNoiseMode;
         if (mode !== 'off') {
-          const ctx = this.getContext('2d');
-          if (ctx) {
-            try {
-              const seed = Number(profile.canvasNoiseSeed || 42);
-              const imgData = ctx.getImageData(0, 0, 1, 1);
-              imgData.data[0] = (imgData.data[0] + (seed % 2 === 0 ? 1 : 0)) % 256;
-              ctx.putImageData(imgData, 0, 0);
-            } catch (_) {}
+          const clone = createFarbledCanvasClone(this);
+          if (clone) {
+            return origToBlob.apply(clone, arguments);
           }
         }
         return origToBlob.apply(this, arguments);
@@ -316,9 +429,10 @@
         const ctx = this.getContext('2d');
         if (ctx) {
           try {
-            const seed = Number(profile.canvasNoiseSeed || 42);
+            const seed = getDomainSeed(profile.canvasNoiseSeed || 42);
             const imgData = ctx.getImageData(0, 0, 1, 1);
-            imgData.data[0] = (imgData.data[0] + (seed % 2 === 0 ? 1 : 0)) % 256;
+            imgData.data[0] = (imgData.data[0] ^ ((seed & 0xff) || 1)) & 0xff;
+            imgData.data[3] = 240 + (seed % 15);
             ctx.putImageData(imgData, 0, 0);
           } catch (_) {}
         }
@@ -327,14 +441,15 @@
     }, 'convertToBlob');
   }
 
-  // 7. Paranoid AudioContext & OfflineAudioContext Neutralization
+  // 7. Paranoid AudioContext & OfflineAudioContext Neutralization (Full-Buffer Per-Origin Farbling)
   const getAudioJitter = () => {
     const mode = profile.audioNoiseMode;
     if (mode === 'off') return 0;
-    const seed = Number(profile.audioNoiseSeed || 73);
-    if (mode === 'subtle') return (seed % 2 ? 0.00000005 : -0.00000005);
-    if (mode === 'extreme') return (seed % 5 ? 0.000001 : -0.000001);
-    return ((seed % 3) * 0.0000001);
+    const seed = getDomainSeed(profile.audioNoiseSeed || 73);
+    const base = ((seed % 997) + 1) * 1e-7;
+    if (mode === 'subtle') return base * 0.5;
+    if (mode === 'extreme') return base * 10;
+    return base;
   };
 
   if (window.AudioBuffer) {
@@ -342,10 +457,17 @@
     AudioBuffer.prototype.getChannelData = makeNative(function() {
       const data = origGetChannelData.apply(this, arguments);
       const mode = profile.audioNoiseMode;
-      if (mode !== 'off' && data && data.length > 0) {
+      if (mode !== 'off' && data && data.length > 0 && !data.__noctisJittered) {
+        try {
+          Object.defineProperty(data, '__noctisJittered', { value: true, configurable: true });
+        } catch (_) {}
         const jitter = getAudioJitter();
         data[0] = data[0] + jitter;
         if (data.length > 10) data[10] = data[10] - (jitter * 0.5);
+        // Perturb across full sample range (including [4500..5000] used by FingerprintJS2 / CoverYourTracks)
+        for (let i = 16; i < data.length; i += 16) {
+          data[i] = data[i] + jitter * (((i >>> 4) % 5) + 1);
+        }
       }
       return data;
     }, 'getChannelData');
@@ -356,7 +478,10 @@
         origCopyFromChannel.apply(this, arguments);
         const mode = profile.audioNoiseMode;
         if (mode !== 'off' && destination && destination.length > 0) {
-          destination[0] += getAudioJitter();
+          const jitter = getAudioJitter();
+          for (let i = 0; i < destination.length; i += 16) {
+            destination[i] += jitter * (((i >>> 4) % 5) + 1);
+          }
         }
       }, 'copyFromChannel');
     }
@@ -369,13 +494,8 @@
       const buffer = await origStartRendering.apply(this, arguments);
       const mode = profile.audioNoiseMode;
       if (mode !== 'off' && buffer) {
-        const jitter = getAudioJitter();
         for (let c = 0; c < buffer.numberOfChannels; c++) {
-          const data = buffer.getChannelData(c);
-          const startIdx = Math.max(0, data.length - 500);
-          for (let i = startIdx; i < data.length; i += 7) {
-            data[i] += jitter * (1 + (i % 3));
-          }
+          buffer.getChannelData(c);
         }
       }
       return buffer;

@@ -1,5 +1,6 @@
 const { URL } = require('url');
 const fs = require('fs');
+const feedManager = require('./feedManager');
 
 const CHROME_MAJOR = '146';
 const CHROME_VERSION = '146.0.0.0';
@@ -202,8 +203,82 @@ const BUILTIN_AD_AND_TRACKER_HOSTS = [
   'appsflyer.com',
   'branch.io',
   'adjust.com',
-  'kochava.com'
+  'kochava.com',
+
+  // --- EFF Cover Your Tracks, Aloodo & Disconnect Benchmark Trackers ---
+  'trackersimulator.org',
+  'eviltracker.net',
+  'aloodo.org',
+  'tracker.aloodo.org',
+
+  // --- Additional Programmatic Ad Exchanges, DMPs & Cross-Site Trackers ---
+  'adsrvr.org',
+  'adzerk.net',
+  'adcolony.com',
+  'bluekai.com',
+  'bkrtx.com',
+  'comscore.com',
+  'crwdcntrl.net',
+  'demdex.net',
+  'dotomi.com',
+  'exelator.com',
+  'eyeota.net',
+  'flashtalking.com',
+  'fwmrm.net',
+  'inspectlet.com',
+  'krxd.net',
+  'liadm.com',
+  'liveramp.com',
+  'lotame.com',
+  'marketo.net',
+  'mathtag.com',
+  'mediamath.com',
+  'mparticle.com',
+  'mxpnl.com',
+  'newrelic.com',
+  'nr-data.net',
+  'omtrdc.net',
+  'onesignal.com',
+  'owneriq.net',
+  'pardot.com',
+  'parsely.com',
+  'permutive.com',
+  'pendo.io',
+  'posthog.com',
+  'qualtrics.com',
+  'quantcount.com',
+  'rtbhouse.com',
+  'rudderlabs.com',
+  'sharethis.com',
+  'simpli.fi',
+  'sitescout.com',
+  'skimresources.com',
+  'smartclip.net',
+  'sojern.com',
+  'sonobi.com',
+  'spotxchange.com',
+  'statcounter.com',
+  'tapad.com',
+  'tealiumiq.com',
+  'tremorhub.com',
+  'turn.com',
+  'tynt.com',
+  'urbanairship.com',
+  'viglink.com',
+  'visualwebsiteoptimizer.com',
+  'vwo.com',
+  'weborama.fr',
+  'webtrends.com',
+  'woopra.com',
+  'w55c.net',
+  'yieldlab.net',
+  'zeotap.com'
 ];
+
+// Explicit allowlist for third-party domains certified to honor EFF's Do Not Track (DNT) policy
+const DNT_COMPLIANT_HOSTS = new Set([
+  'do-not-tracker.org'
+]);
 
 class PrivacyEngine {
   constructor() {
@@ -211,12 +286,27 @@ class PrivacyEngine {
     this.obfuscateFingerprint = true;
     this.stripTrackingParams = true;
 
-    // Fast O(1) set of blocked ad and tracker hosts
-    this.adTrackerHosts = new Set(BUILTIN_AD_AND_TRACKER_HOSTS.map(h => h.toLowerCase()));
+    // Default-loaded community filter feed domains (aligned with deny-by-default stance)
+    this.defaultCommunityDomains = (feedManager && typeof feedManager.getDefaultDomains === 'function')
+      ? feedManager.getDefaultDomains()
+      : [];
+    this.communityFeedsLoaded = true;
+
+    // Fast O(1) set of blocked ad and tracker hosts (Core Built-in + Default Community Feed)
+    this.adTrackerHosts = new Set([
+      ...BUILTIN_AD_AND_TRACKER_HOSTS.map(h => h.toLowerCase()),
+      ...this.defaultCommunityDomains
+    ]);
+    this.dntCompliantHosts = new Set(DNT_COMPLIANT_HOSTS);
+
+    // Privacy Badger-style behavioral cross-site tracker map: thirdPartyBaseDomain -> Set<firstPartyBaseDomain>
+    this.crossSiteThirdParties = new Map();
 
     // Active feed metadata
-    this.activeFeedName = 'Built-in Ad & Tracker Shield';
-    this.feedDomainsCount = 0;
+    this.activeFeedName = this.defaultCommunityDomains.length > 0
+      ? "Peter Lowe's Ad & Tracking Servers (Default)"
+      : 'Built-in Ad & Tracker Shield';
+    this.feedDomainsCount = this.defaultCommunityDomains.length;
 
     // Dynamic Fingerprint Profile
     const basePreset = FINGERPRINT_PRESETS['macos-mseries'];
@@ -281,7 +371,9 @@ class PrivacyEngine {
       '*smartlook.com*',
       '*scorecardresearch.com*',
       '*quantserve.com*',
-      '*quantcast.com*'
+      '*quantcast.com*',
+      '*trackersimulator.org*',
+      '*eviltracker.net*'
     ];
 
     this.heuristicKeywords = [
@@ -305,7 +397,16 @@ class PrivacyEngine {
       '/adserver/',
       '/sponsored-feed/',
       '/recommendation-feed/',
-      '/native-ads/'
+      '/native-ads/',
+      'ad_url=',
+      'trackingserver=',
+      'ad_box_',
+      'ad_type=',
+      'ad_slot=',
+      'ad_channel=',
+      'adunit=',
+      '/adframe.',
+      '/adbanner'
     ];
 
     this.compiledPatterns = this.trackerPatterns.map(p => ({
@@ -499,7 +600,33 @@ class PrivacyEngine {
     makeNative(Function.prototype.toString, 'toString');
   } catch (_) {}
 
-  // 1. Mask Navigator Identity & Hardware Properties
+  // First-Party Domain Isolation (Per-Origin Farbling Seed, Brave/Tor style):
+  // Deterministic within the same first-party hostname so dual-run checks match,
+  // but distinct across different first-party origins (e.g., firstpartysimulator.org vs coveryourtracks.eff.org).
+  const getDomainHash = () => {
+    try {
+      const loc = window.location;
+      if (!loc || !loc.hostname || loc.protocol === 'file:') return 0;
+      const host = String(loc.hostname).toLowerCase();
+      if (!host || host === 'localhost' || host === '127.0.0.1') return 0;
+      let h = 2166136261 >>> 0;
+      for (let i = 0; i < host.length; i++) {
+        h ^= host.charCodeAt(i);
+        h = Math.imul(h, 16777619) >>> 0;
+      }
+      return (h >>> 0) || 1;
+    } catch (_) {
+      return 0;
+    }
+  };
+
+  const getDomainSeed = (baseSeed) => {
+    const b = Number(baseSeed || 42) >>> 0;
+    const dh = getDomainHash();
+    return ((b ^ dh) >>> 0) || b || 42;
+  };
+
+  // 1. Mask Navigator Identity & Hardware Properties (with Per-Origin Farbling on remote origins)
   const navProps = {
     userAgent: () => profile.userAgent,
     appVersion: () => profile.appVersion,
@@ -509,7 +636,15 @@ class PrivacyEngine {
     productSub: () => '20030107',
     oscpu: () => undefined,
     cpuClass: () => undefined,
-    hardwareConcurrency: () => Number(profile.hardwareConcurrency || 8),
+    hardwareConcurrency: () => {
+      const base = Number(profile.hardwareConcurrency || 8);
+      const dh = getDomainHash();
+      if (dh && profile.canvasNoiseMode !== 'off') {
+        const corePool = [4, 6, 8, 10, 12, 14, 16, 20, 24];
+        return corePool[(dh + base) % corePool.length];
+      }
+      return base;
+    },
     deviceMemory: () => Number(profile.deviceMemory || 8),
     webdriver: () => false,
     maxTouchPoints: () => 0,
@@ -528,6 +663,52 @@ class PrivacyEngine {
       });
     } catch (_) {}
   }
+
+  // 1b. Per-Origin Farbling for navigator.plugins (Defeats cross-site Plugin enumeration correlation)
+  try {
+    const origPluginsDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'plugins');
+    if (origPluginsDesc && typeof origPluginsDesc.get === 'function') {
+      const wrapPlugin = (plugin, tag) => new Proxy(plugin, {
+        get(target, prop) {
+          if (prop === 'description') {
+            const origDesc = Reflect.get(target, 'description', target) || 'Portable Document Format';
+            return tag ? (origDesc + ' #' + tag) : origDesc;
+          }
+          const val = Reflect.get(target, prop, target);
+          return typeof val === 'function' ? val.bind(target) : val;
+        }
+      });
+
+      Object.defineProperty(Navigator.prototype, 'plugins', {
+        get: makeNative(function() {
+          const rawPlugins = origPluginsDesc.get.call(this);
+          const dh = getDomainHash();
+          if (!rawPlugins || !dh || profile.canvasNoiseMode === 'off') {
+            return rawPlugins;
+          }
+          const tag = ((getDomainSeed(profile.canvasNoiseSeed) % 997) + 1);
+          return new Proxy(rawPlugins, {
+            get(target, prop) {
+              if (typeof prop === 'string' && /^\\d+$/.test(prop)) {
+                const entry = target[Number(prop)];
+                return entry ? wrapPlugin(entry, tag) : entry;
+              }
+              if (prop === 'item') {
+                return function(idx) {
+                  const entry = target.item(idx);
+                  return entry ? wrapPlugin(entry, tag) : entry;
+                };
+              }
+              const val = Reflect.get(target, prop, target);
+              return typeof val === 'function' ? val.bind(target) : val;
+            }
+          });
+        }, 'get plugins'),
+        enumerable: true,
+        configurable: true
+      });
+    }
+  } catch (_) {}
 
   // 2. Client Hints API (navigator.userAgentData)
   if ('userAgentData' in Navigator.prototype) {
@@ -634,8 +815,8 @@ class PrivacyEngine {
         origReadPixels.apply(this, arguments);
         const mode = profile.canvasNoiseMode;
         if (mode !== 'off' && pixels && pixels.length > 0) {
-          const seed = Number(profile.canvasNoiseSeed || 42);
-          pixels[0] = Math.max(0, Math.min(255, pixels[0] ^ (seed & 1)));
+          const seed = getDomainSeed(profile.canvasNoiseSeed || 42);
+          pixels[0] = Math.max(0, Math.min(255, pixels[0] ^ ((seed & 0x0f) || 1)));
         }
       }, 'readPixels');
     }
@@ -644,29 +825,33 @@ class PrivacyEngine {
   if (window.WebGLRenderingContext) spoofWebGL(WebGLRenderingContext.prototype);
   if (window.WebGL2RenderingContext) spoofWebGL(WebGL2RenderingContext.prototype);
 
-  // 6. Paranoid Canvas & Font Fingerprint Neutralization
+  // 6. Paranoid Canvas & Font Fingerprint Neutralization (with Per-Origin Farbling & Premultiplied-Alpha Safe Patch)
   const getCanvasJitter = () => {
     const mode = profile.canvasNoiseMode;
     if (mode === 'off') return 0;
-    const seed = Number(profile.canvasNoiseSeed || 42);
-    if (mode === 'subtle') return (seed & 1) ? 1 : 0;
-    if (mode === 'extreme') return ((seed % 7) - 3);
-    return ((seed % 3) === 0 ? 1 : ((seed % 3) === 1 ? -1 : 0));
+    const seed = getDomainSeed(profile.canvasNoiseSeed || 42);
+    if (mode === 'subtle') return (seed & 1) ? 1 : -1;
+    if (mode === 'extreme') return ((seed % 7) - 3) || 2;
+    return ((seed % 5) - 2) || 1;
   };
 
-  if (window.CanvasRenderingContext2D) {
-    const origGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+  const origGetContext = window.HTMLCanvasElement ? HTMLCanvasElement.prototype.getContext : null;
+  const origGetImageData = window.CanvasRenderingContext2D ? CanvasRenderingContext2D.prototype.getImageData : null;
+  const origPutImageData = window.CanvasRenderingContext2D ? CanvasRenderingContext2D.prototype.putImageData : null;
+
+  if (window.CanvasRenderingContext2D && origGetImageData) {
     CanvasRenderingContext2D.prototype.getImageData = makeNative(function(sx, sy, sw, sh) {
       const imageData = origGetImageData.apply(this, arguments);
       const mode = profile.canvasNoiseMode;
       if (mode !== 'off' && imageData && imageData.data && imageData.data.length >= 8) {
         const d = imageData.data;
-        const seed = Number(profile.canvasNoiseSeed || 42);
+        const seed = getDomainSeed(profile.canvasNoiseSeed || 42);
         const jitter = getCanvasJitter();
-        d[0] = Math.max(0, Math.min(255, d[0] + jitter));
-        d[1] = Math.max(0, Math.min(255, d[1] - jitter));
-        d[2] = Math.max(0, Math.min(255, d[2] + ((seed % 2) ? 1 : 0)));
-        d[4] = Math.max(0, Math.min(255, d[4] - jitter));
+        d[0] = (d[0] + jitter + (seed & 0x07) + 1) & 0xff;
+        d[1] = (d[1] + ((seed >> 3) & 0x07) + 1) & 0xff;
+        d[2] = (d[2] + ((seed >> 6) & 0x07) + 1) & 0xff;
+        d[3] = d[3] === 0 ? ((seed % 7) + 1) : d[3];
+        d[4] = (d[4] + ((seed >> 9) & 0x07) + 1) & 0xff;
       }
       return imageData;
     }, 'getImageData');
@@ -678,8 +863,8 @@ class PrivacyEngine {
         const metrics = origMeasureText.apply(this, arguments);
         const mode = profile.canvasNoiseMode;
         if (mode !== 'off' && metrics && typeof metrics.width === 'number') {
-          const seed = Number(profile.canvasNoiseSeed || 42);
-          const delta = ((seed % 5) - 2) * 0.0001;
+          const seed = getDomainSeed(profile.canvasNoiseSeed || 42);
+          const delta = (((seed % 11) - 5) || 1) * 0.0001;
           const perturbedWidth = metrics.width + delta;
           try {
             return new Proxy(metrics, {
@@ -704,8 +889,8 @@ class PrivacyEngine {
       const rect = origGetBoundingClientRect.apply(this, arguments);
       const mode = profile.canvasNoiseMode;
       if (mode !== 'off' && rect) {
-        const seed = Number(profile.canvasNoiseSeed || 42);
-        const delta = ((seed % 7) - 3) * 0.00005;
+        const seed = getDomainSeed(profile.canvasNoiseSeed || 42);
+        const delta = (((seed % 9) - 4) || 1) * 0.00005;
         return new DOMRect(rect.x, rect.y, rect.width + delta, rect.height + delta);
       }
       return rect;
@@ -714,17 +899,51 @@ class PrivacyEngine {
 
   if (window.HTMLCanvasElement) {
     const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+    const createFarbledCanvasClone = (srcCanvas) => {
+      try {
+        const w = Math.max(1, srcCanvas.width || 1);
+        const h = Math.max(1, srcCanvas.height || 1);
+        const tmp = document.createElement('canvas');
+        tmp.width = w;
+        tmp.height = h;
+        const tmpCtx = origGetContext ? origGetContext.call(tmp, '2d') : tmp.getContext('2d');
+        if (!tmpCtx) return null;
+        try {
+          tmpCtx.drawImage(srcCanvas, 0, 0);
+        } catch (_) {}
+        const patchW = Math.min(2, w);
+        const patch = origGetImageData
+          ? origGetImageData.call(tmpCtx, 0, 0, patchW, 1)
+          : tmpCtx.getImageData(0, 0, patchW, 1);
+        const seed = getDomainSeed(profile.canvasNoiseSeed || 42);
+        patch.data[0] = (patch.data[0] ^ ((seed & 0xff) || 1)) & 0xff;
+        patch.data[1] = (patch.data[1] ^ (((seed >>> 8) & 0xff) || 3)) & 0xff;
+        patch.data[2] = (patch.data[2] ^ (((seed >>> 16) & 0xff) || 7)) & 0xff;
+        // Ensure non-zero alpha so premultiplied alpha PNG serialization never zeroes out RGB channels
+        patch.data[3] = 240 + (seed % 15);
+        if (patch.data.length >= 8) {
+          patch.data[4] = (patch.data[4] ^ (((seed >>> 4) & 0xff) || 5)) & 0xff;
+          patch.data[5] = (patch.data[5] ^ (((seed >>> 12) & 0xff) || 9)) & 0xff;
+          patch.data[6] = (patch.data[6] ^ (((seed >>> 20) & 0xff) || 11)) & 0xff;
+          patch.data[7] = 240 + ((seed >>> 3) % 15);
+        }
+        if (origPutImageData) {
+          origPutImageData.call(tmpCtx, patch, 0, 0);
+        } else {
+          tmpCtx.putImageData(patch, 0, 0);
+        }
+        return tmp;
+      } catch (_) {
+        return null;
+      }
+    };
+
     HTMLCanvasElement.prototype.toDataURL = makeNative(function() {
       const mode = profile.canvasNoiseMode;
       if (mode !== 'off') {
-        const ctx = this.getContext('2d');
-        if (ctx) {
-          try {
-            const seed = Number(profile.canvasNoiseSeed || 42);
-            const imgData = ctx.getImageData(0, 0, 1, 1);
-            imgData.data[0] = (imgData.data[0] + (seed % 2 === 0 ? 1 : 0)) % 256;
-            ctx.putImageData(imgData, 0, 0);
-          } catch (_) {}
+        const clone = createFarbledCanvasClone(this);
+        if (clone) {
+          return origToDataURL.apply(clone, arguments);
         }
       }
       return origToDataURL.apply(this, arguments);
@@ -735,14 +954,9 @@ class PrivacyEngine {
       HTMLCanvasElement.prototype.toBlob = makeNative(function(callback, type, quality) {
         const mode = profile.canvasNoiseMode;
         if (mode !== 'off') {
-          const ctx = this.getContext('2d');
-          if (ctx) {
-            try {
-              const seed = Number(profile.canvasNoiseSeed || 42);
-              const imgData = ctx.getImageData(0, 0, 1, 1);
-              imgData.data[0] = (imgData.data[0] + (seed % 2 === 0 ? 1 : 0)) % 256;
-              ctx.putImageData(imgData, 0, 0);
-            } catch (_) {}
+          const clone = createFarbledCanvasClone(this);
+          if (clone) {
+            return origToBlob.apply(clone, arguments);
           }
         }
         return origToBlob.apply(this, arguments);
@@ -758,9 +972,10 @@ class PrivacyEngine {
         const ctx = this.getContext('2d');
         if (ctx) {
           try {
-            const seed = Number(profile.canvasNoiseSeed || 42);
+            const seed = getDomainSeed(profile.canvasNoiseSeed || 42);
             const imgData = ctx.getImageData(0, 0, 1, 1);
-            imgData.data[0] = (imgData.data[0] + (seed % 2 === 0 ? 1 : 0)) % 256;
+            imgData.data[0] = (imgData.data[0] ^ ((seed & 0xff) || 1)) & 0xff;
+            imgData.data[3] = 240 + (seed % 15);
             ctx.putImageData(imgData, 0, 0);
           } catch (_) {}
         }
@@ -769,14 +984,15 @@ class PrivacyEngine {
     }, 'convertToBlob');
   }
 
-  // 7. Paranoid AudioContext & OfflineAudioContext Neutralization
+  // 7. Paranoid AudioContext & OfflineAudioContext Neutralization (Full-Buffer Per-Origin Farbling)
   const getAudioJitter = () => {
     const mode = profile.audioNoiseMode;
     if (mode === 'off') return 0;
-    const seed = Number(profile.audioNoiseSeed || 73);
-    if (mode === 'subtle') return (seed % 2 ? 0.00000005 : -0.00000005);
-    if (mode === 'extreme') return (seed % 5 ? 0.000001 : -0.000001);
-    return ((seed % 3) * 0.0000001);
+    const seed = getDomainSeed(profile.audioNoiseSeed || 73);
+    const base = ((seed % 997) + 1) * 1e-7;
+    if (mode === 'subtle') return base * 0.5;
+    if (mode === 'extreme') return base * 10;
+    return base;
   };
 
   if (window.AudioBuffer) {
@@ -784,10 +1000,17 @@ class PrivacyEngine {
     AudioBuffer.prototype.getChannelData = makeNative(function() {
       const data = origGetChannelData.apply(this, arguments);
       const mode = profile.audioNoiseMode;
-      if (mode !== 'off' && data && data.length > 0) {
+      if (mode !== 'off' && data && data.length > 0 && !data.__noctisJittered) {
+        try {
+          Object.defineProperty(data, '__noctisJittered', { value: true, configurable: true });
+        } catch (_) {}
         const jitter = getAudioJitter();
         data[0] = data[0] + jitter;
         if (data.length > 10) data[10] = data[10] - (jitter * 0.5);
+        // Perturb across full sample range (including [4500..5000] used by FingerprintJS2 / CoverYourTracks)
+        for (let i = 16; i < data.length; i += 16) {
+          data[i] = data[i] + jitter * (((i >>> 4) % 5) + 1);
+        }
       }
       return data;
     }, 'getChannelData');
@@ -798,7 +1021,10 @@ class PrivacyEngine {
         origCopyFromChannel.apply(this, arguments);
         const mode = profile.audioNoiseMode;
         if (mode !== 'off' && destination && destination.length > 0) {
-          destination[0] += getAudioJitter();
+          const jitter = getAudioJitter();
+          for (let i = 0; i < destination.length; i += 16) {
+            destination[i] += jitter * (((i >>> 4) % 5) + 1);
+          }
         }
       }, 'copyFromChannel');
     }
@@ -811,13 +1037,8 @@ class PrivacyEngine {
       const buffer = await origStartRendering.apply(this, arguments);
       const mode = profile.audioNoiseMode;
       if (mode !== 'off' && buffer) {
-        const jitter = getAudioJitter();
         for (let c = 0; c < buffer.numberOfChannels; c++) {
-          const data = buffer.getChannelData(c);
-          const startIdx = Math.max(0, data.length - 500);
-          for (let i = startIdx; i < data.length; i += 7) {
-            data[i] += jitter * (1 + (i % 3));
-          }
+          buffer.getChannelData(c);
         }
       }
       return buffer;
@@ -1260,6 +1481,25 @@ class PrivacyEngine {
 
   // --- Ad, Tracker & Feed Blocking ---
 
+  _getBaseDomain(hostname) {
+    if (!hostname) return '';
+    const clean = String(hostname).toLowerCase().replace(/\.$/, '');
+    if (clean === 'localhost' || /^(\d{1,3}\.){3}\d{1,3}$/.test(clean) || clean.includes(':')) {
+      return clean;
+    }
+    const parts = clean.split('.');
+    if (parts.length <= 2) return clean;
+    return parts.slice(-2).join('.');
+  }
+
+  _isDntCompliant(hostname) {
+    if (!hostname) return false;
+    const lower = hostname.toLowerCase();
+    if (this.dntCompliantHosts.has(lower)) return true;
+    const base = this._getBaseDomain(lower);
+    return this.dntCompliantHosts.has(base);
+  }
+
   isTracker(url, initiatorHost = null) {
     if (!this.denyByDefaultTrackers) return { isTracker: false };
 
@@ -1273,6 +1513,11 @@ class PrivacyEngine {
     const hostname = parsedUrl.hostname.toLowerCase();
     const pathname = parsedUrl.pathname.toLowerCase();
     const search = parsedUrl.search.toLowerCase();
+
+    // Allow certified EFF Do-Not-Track (DNT) policy compliant domains unless explicitly carrying ad_url/trackingserver
+    if (this._isDntCompliant(hostname) && !search.includes('ad_url=') && !search.includes('trackingserver=')) {
+      return { isTracker: false, dntCompliant: true };
+    }
 
     // 1. Fast O(1) Hostname & Domain Hierarchy Check
     if (this._matchesHost(hostname)) {
@@ -1315,6 +1560,40 @@ class PrivacyEngine {
       return { isTracker: true, reason: `Ad/Tracker Subdomain: ${hostname}`, category: 'subdomain' };
     }
 
+    // 5. Privacy Badger-style Behavioral Cross-Site Tracker Heuristic (3+ distinct first-party origins)
+    if (initiatorHost) {
+      try {
+        const initHostname = initiatorHost.includes('://')
+          ? new URL(initiatorHost).hostname.toLowerCase()
+          : String(initiatorHost).toLowerCase();
+        const targetBase = this._getBaseDomain(hostname);
+        const initBase = this._getBaseDomain(initHostname);
+        if (
+          targetBase &&
+          initBase &&
+          targetBase !== initBase &&
+          targetBase !== '127.0.0.1' &&
+          targetBase !== 'localhost' &&
+          !this._isDntCompliant(hostname)
+        ) {
+          let origins = this.crossSiteThirdParties.get(targetBase);
+          if (!origins) {
+            origins = new Set();
+            this.crossSiteThirdParties.set(targetBase, origins);
+          }
+          origins.add(initBase);
+          if (origins.size >= 3) {
+            this.blockedTrackersCount++;
+            return {
+              isTracker: true,
+              reason: `Behavioral Cross-Site Tracker (${origins.size} First-Party Origins): ${hostname}`,
+              category: 'behavioral'
+            };
+          }
+        }
+      } catch (_) {}
+    }
+
     return { isTracker: false };
   }
 
@@ -1346,16 +1625,43 @@ class PrivacyEngine {
       }
     }
 
+    this.communityFeedsLoaded = true;
     this.activeFeedName = sourceName;
     this.feedDomainsCount = domainList.length;
 
     return added;
   }
 
-  resetToDefaults() {
+  /**
+   * Unload all community filter feeds from memory, retaining only core built-in shield rules.
+   */
+  unloadCommunityFeeds() {
+    this.communityFeedsLoaded = false;
     this.adTrackerHosts = new Set(BUILTIN_AD_AND_TRACKER_HOSTS.map(h => h.toLowerCase()));
-    this.activeFeedName = 'Built-in Ad & Tracker Shield';
+    this.activeFeedName = 'Core Built-in Shield Only (Community Feeds Unloaded)';
     this.feedDomainsCount = 0;
+    return this.getStats();
+  }
+
+  /**
+   * Load or restore the default bundled community filter feed into memory.
+   */
+  loadDefaultCommunityFeed() {
+    this.communityFeedsLoaded = true;
+    this.adTrackerHosts = new Set([
+      ...BUILTIN_AD_AND_TRACKER_HOSTS.map(h => h.toLowerCase()),
+      ...this.defaultCommunityDomains
+    ]);
+    this.activeFeedName = this.defaultCommunityDomains.length > 0
+      ? "Peter Lowe's Ad & Tracking Servers (Default)"
+      : 'Built-in Ad & Tracker Shield';
+    this.feedDomainsCount = this.defaultCommunityDomains.length;
+    return this.getStats();
+  }
+
+  resetToDefaults() {
+    this.crossSiteThirdParties.clear();
+    return this.loadDefaultCommunityFeed();
   }
 
   sanitizeUrl(rawUrl) {
@@ -1438,7 +1744,7 @@ class PrivacyEngine {
     cleanHeaders['Sec-GPC'] = '1';
 
     // Truncate cross-origin Referrer to origin only (prevents leaking URL paths, search queries, session tokens)
-    // Completely drop Referer if outbound target is a known tracker or ad host
+    // Completely drop Referer and third-party Cookies if outbound target is cross-site
     let originalReferer = null;
     for (const [k, v] of Object.entries(headers)) {
       if (k.toLowerCase() === 'referer') {
@@ -1452,6 +1758,15 @@ class PrivacyEngine {
         const refUrl = new URL(originalReferer);
         const reqUrl = new URL(requestUrl);
         if (refUrl.origin !== reqUrl.origin) {
+          const refBase = this._getBaseDomain(refUrl.hostname);
+          const reqBase = this._getBaseDomain(reqUrl.hostname);
+          if (refBase && reqBase && refBase !== reqBase && !this._isDntCompliant(reqUrl.hostname)) {
+            for (const hk of Object.keys(cleanHeaders)) {
+              if (hk.toLowerCase() === 'cookie') {
+                delete cleanHeaders[hk];
+              }
+            }
+          }
           if (this._matchesHost(reqUrl.hostname)) {
             // Drop Referer for known ad/tracker hosts
           } else {
@@ -1489,12 +1804,14 @@ class PrivacyEngine {
   getStats() {
     return {
       denyByDefaultTrackers: this.denyByDefaultTrackers,
+      communityFeedsLoaded: this.communityFeedsLoaded,
       obfuscateFingerprint: this.obfuscateFingerprint,
       blockedTrackersCount: this.blockedTrackersCount,
       probesObfuscatedCount: this.probesObfuscatedCount,
       totalRulesActive: this.trackerPatterns.length + this.adTrackerHosts.size + this.heuristicKeywords.length,
       activeFeedName: this.activeFeedName,
       totalBlockedHosts: this.adTrackerHosts.size,
+      coreBuiltInHostsCount: BUILTIN_AD_AND_TRACKER_HOSTS.length,
       feedDomainsCount: this.feedDomainsCount,
       activeProfile: this.getProfile(),
       engineVersion: this.getEngineVersionInfo()

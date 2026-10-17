@@ -126,7 +126,7 @@ class NetworkManager extends EventEmitter {
   }
 
   // Check if URL matches any active block rule or tracker pattern
-  checkBlocked(url) {
+  checkBlocked(url, initiatorHost = null) {
     // 1. User-configured custom block rules
     for (const rule of this.blockRules) {
       if (rule.enabled && this.matchesPattern(url, rule.pattern)) {
@@ -136,7 +136,7 @@ class NetworkManager extends EventEmitter {
     }
 
     // 2. Deny-by-default Tracker Shield
-    const trackerCheck = privacyEngine.isTracker(url);
+    const trackerCheck = privacyEngine.isTracker(url, initiatorHost);
     if (trackerCheck.isTracker) {
       return {
         blocked: true,
@@ -186,7 +186,11 @@ class NetworkManager extends EventEmitter {
     if (!entry || !entry.webContents || entry.webContents.isDestroyed()) return;
 
     // 1. Check if blocked by rules
-    const blockCheck = this.checkBlocked(request.url);
+    const isSubresource = resourceType && resourceType !== 'Document';
+    const refHeader = isSubresource && request.headers
+      ? (request.headers.Referer || request.headers.referer || null)
+      : null;
+    const blockCheck = this.checkBlocked(request.url, refHeader);
     if (blockCheck.blocked) {
       this.metrics.totalBlocked++;
       entry.webContents.debugger.sendCommand('Fetch.failRequest', {

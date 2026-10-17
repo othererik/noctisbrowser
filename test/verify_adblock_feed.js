@@ -128,4 +128,105 @@ assert.strictEqual(privacyEngine.adTrackerHosts.size, initialHostCount, 'Should 
 assert.strictEqual(privacyEngine.isTracker(`https://${testDomain}/ad.js`).isTracker, false, 'Reset domain should no longer be in feed list');
 console.log('   ✅ In-memory feed injection and clean reset verified!');
 
+// 7. Test EFF Cover Your Tracks (Panopticlick) Ad, Invisible Tracker, DNT & Behavioral Heuristics
+console.log('7. Testing EFF Cover Your Tracks (Ad, Invisible Tracker, DNT & Behavioral 3-Origin Heuristics)...');
+assert.strictEqual(
+  privacyEngine.isTracker('https://trackersimulator.org/kcarting-tally?&ad_url=123456').isTracker,
+  true,
+  'EFF CoverYourTracks simulated tracking ad (trackersimulator.org) must be blocked'
+);
+assert.strictEqual(
+  privacyEngine.isTracker('https://trackersimulator.org/kcarting-tally?&random=123456').isTracker,
+  true,
+  'EFF CoverYourTracks domain-level ad check on /results must be blocked'
+);
+assert.strictEqual(
+  privacyEngine.isTracker('https://eviltracker.net/kcarting-tally?&trackingserver=123456').isTracker,
+  true,
+  'EFF CoverYourTracks simulated invisible tracker (eviltracker.net) must be blocked'
+);
+assert.strictEqual(
+  privacyEngine.isTracker('https://eviltracker.net/kcarting-tally?&random=123456').isTracker,
+  true,
+  'EFF CoverYourTracks domain-level tracker check on /results must be blocked'
+);
+assert.strictEqual(
+  privacyEngine.isTracker('https://unknown-ad-host.example/ tally?&ad_url=999').isTracker,
+  true,
+  'EasyList ad_url= query parameter signature must be blocked on any host'
+);
+assert.strictEqual(
+  privacyEngine.isTracker('https://unknown-beacon-host.example/tally?&trackingserver=999').isTracker,
+  true,
+  'EasyPrivacy trackingserver= query parameter signature must be blocked on any host'
+);
+const dntCheck = privacyEngine.isTracker('https://do-not-tracker.org/kcarting-tally?&random=123456', 'https://coveryourtracks.eff.org');
+assert.strictEqual(dntCheck.isTracker, false, 'EFF DNT-compliant domain (do-not-tracker.org) must remain unblocked');
+assert.strictEqual(dntCheck.dntCompliant, true, 'do-not-tracker.org must be recognized as DNT-compliant');
+
+// Test Privacy Badger 3-origin behavioral heuristic on an unlisted third-party domain
+const novelTrackerUrl = 'https://novel-cross-site-observer.org/widget.js';
+assert.strictEqual(
+  privacyEngine.isTracker(novelTrackerUrl, 'https://firstparty-one.org/page').isTracker,
+  false,
+  '1st first-party origin should not yet trigger 3-origin behavioral block'
+);
+assert.strictEqual(
+  privacyEngine.isTracker(novelTrackerUrl, 'https://firstparty-two.net/page').isTracker,
+  false,
+  '2nd first-party origin should not yet trigger 3-origin behavioral block'
+);
+const thirdOriginCheck = privacyEngine.isTracker(novelTrackerUrl, 'https://firstparty-three.com/page');
+assert.strictEqual(
+  thirdOriginCheck.isTracker,
+  true,
+  '3rd distinct first-party origin MUST trigger Privacy Badger behavioral cross-site tracker block'
+);
+assert.strictEqual(thirdOriginCheck.category, 'behavioral');
+privacyEngine.resetToDefaults();
+console.log('   ✅ EFF Cover Your Tracks ad, invisible tracker, DNT & behavioral heuristics verified!');
+
+// 8. Test Default-Loaded Community Filter Feeds & Explicit Unload Option
+console.log('8. Testing Default-Loaded Community Filter Feeds & Explicit Unload Option...');
+const defaultStats = privacyEngine.getStats();
+const defaultFeedStatus = feedManager.getFeedStatus();
+assert.strictEqual(defaultStats.communityFeedsLoaded, true, 'Community filter feeds must be loaded by default');
+assert.strictEqual(defaultFeedStatus.isLoaded, true, 'FeedManager must report default community feed loaded');
+assert(defaultStats.feedDomainsCount > 3000, `Expected >3000 default community feed domains, got ${defaultStats.feedDomainsCount}`);
+assert.strictEqual(
+  privacyEngine.isTracker('https://101com.com/script.js').isTracker,
+  true,
+  'Domain from default-loaded Peter Lowe community feed (101com.com) must be blocked out of the box'
+);
+
+// Unload community feeds
+feedManager.unloadFeed();
+const unloadedStats = privacyEngine.unloadCommunityFeeds();
+assert.strictEqual(unloadedStats.communityFeedsLoaded, false, 'communityFeedsLoaded must be false after unload');
+assert.strictEqual(unloadedStats.feedDomainsCount, 0, 'feedDomainsCount must be 0 after unload');
+assert.strictEqual(feedManager.getFeedStatus().isLoaded, false, 'FeedManager isLoaded must be false after unload');
+assert.strictEqual(
+  privacyEngine.isTracker('https://101com.com/script.js').isTracker,
+  false,
+  'Community feed domain (101com.com) must NOT be blocked when community feeds are unloaded'
+);
+assert.strictEqual(
+  privacyEngine.isTracker('https://googleads.g.doubleclick.net/pagead/ads').isTracker,
+  true,
+  'Core built-in shield domains must still be blocked when community feeds are unloaded'
+);
+
+// Reload default community feed
+feedManager.loadDefaultFeed();
+const reloadedStats = privacyEngine.loadDefaultCommunityFeed();
+assert.strictEqual(reloadedStats.communityFeedsLoaded, true, 'communityFeedsLoaded must be true after reload');
+assert(reloadedStats.feedDomainsCount > 3000, 'feedDomainsCount must be restored after reload');
+assert.strictEqual(
+  privacyEngine.isTracker('https://101com.com/script.js').isTracker,
+  true,
+  'Community feed domain (101com.com) must be blocked again after reloading default feed'
+);
+console.log(`   ✅ Default-loaded community feed (${reloadedStats.feedDomainsCount} domains) & explicit unload/reload verified!`);
+
 console.log('🎉 ALL AD, TRACKER & FEED BLOCKING TESTS PASSED!');
+
