@@ -30,12 +30,17 @@ if (process.platform === 'darwin') {
       '# Zero-Admin Portable Launcher for NoctisBrowser (macOS)',
       'DIR="$(cd "$(dirname "$0")" && pwd)"',
       'APP="$DIR/NoctisBrowser.app"',
-      '# Strip Gatekeeper quarantine flags in user-space (no admin/sudo required)',
-      'xattr -cr "$APP" 2>/dev/null || true',
+      '# Strip Gatekeeper quarantine flags across the entire portable folder in user-space (no admin/sudo required)',
+      'xattr -cr "$DIR" 2>/dev/null || true',
       'chmod +x "$APP/Contents/MacOS/Electron" 2>/dev/null || true',
       'chmod +x "$APP/Contents/Resources/app/bin/macos/aarch64/tor" 2>/dev/null || true',
       'chmod +x "$APP/Contents/Resources/app/bin/macos/x86_64/tor" 2>/dev/null || true',
-      'exec "$APP/Contents/MacOS/Electron" "$@"'
+      'if [ -x "$APP/Contents/MacOS/Electron" ] && "$APP/Contents/MacOS/Electron" --version >/dev/null 2>&1; then',
+      '  exec "$APP/Contents/MacOS/Electron" "$@"',
+      'else',
+      '  echo "Launching via npx electron (zero-admin user space)..."',
+      '  exec npx --yes electron@41.7.1 "$APP/Contents/Resources/app" "$@"',
+      'fi'
     ].join('\n') + '\n';
     fs.writeFileSync(macLauncherPath, macLauncherScript, { mode: 0o755 });
     fs.chmodSync(macLauncherPath, 0o755);
@@ -43,12 +48,17 @@ if (process.platform === 'darwin') {
     fs.writeFileSync(
       path.join(macPortableDir, 'README-PORTABLE.txt'),
       [
-        'NoctisBrowser v1.1.1 — Zero-Admin Portable Edition (macOS)',
+        'NoctisBrowser v1.1.2 — Zero-Admin Portable Edition (macOS)',
         '==========================================================',
         '1. No administrator/root privileges or installer required.',
-        '2. Place this folder anywhere (Desktop, Downloads, USB drive).',
-        '3. Double-click "NoctisBrowser.app" or "Launch-NoctisBrowser.command" to start.',
-        '4. All session data is isolated in ephemeral RAM/tmp storage and wiped on exit.'
+        '2. Note on macOS Gatekeeper ("unknown developer" block):',
+        '   Browsers (Safari/Chrome) attach a "com.apple.quarantine" flag to downloaded ZIPs,',
+        '   which blocks Finder double-clicks before any launcher script can execute.',
+        '3. To open without admin rights, open Terminal.app and run:',
+        '     sh Launch-NoctisBrowser.command',
+        '   (or run: xattr -cr /path/to/NoctisBrowser-macOS-Portable)',
+        '   This removes the quarantine flag in user-space without sudo.',
+        '4. After running once, you can double-click "NoctisBrowser.app" in Finder normally.'
       ].join('\n') + '\n',
       'utf-8'
     );

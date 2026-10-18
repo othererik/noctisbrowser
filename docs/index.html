@@ -75,11 +75,12 @@
             Download for macOS
           </a>
           <div class="run-instructions">
-            <strong>How to run:</strong>
+            <strong>How to run (no admin / bypass Gatekeeper):</strong>
             <ol>
-              <li>Unzip the archive.</li>
-              <li>Double-click <code>Launch-NoctisBrowser.command</code> or <code>NoctisBrowser.app</code>.</li>
-              <li>The launcher automatically clears Gatekeeper quarantine flags in user space.</li>
+              <li>Unzip the archive in <code>~/Downloads</code>.</li>
+              <li>Open <strong>Terminal</strong> and run (no <code>sudo</code> needed):<br>
+                <code>sh ~/Downloads/NoctisBrowser-macOS-Portable/Launch-NoctisBrowser.command</code></li>
+              <li>This strips the browser quarantine flag in user-space so <code>NoctisBrowser.app</code> opens normally on future double-clicks.</li>
             </ol>
           </div>
         </div>
