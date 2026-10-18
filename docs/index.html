@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Noctis Browser — Ephemeral Privacy &amp; Dark-Web Browser</title>
+  <meta name="description" content="Noctis is a zero-admin portable privacy browser with built-in Tor and dark-web protocol routing, ephemeral session storage, and live network observability.">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="container nav-bar">
+      <a href="#" class="brand">
+        <img src="icon.svg" alt="Noctis Logo">
+        <span>Noctis Browser</span>
+      </a>
+      <div class="nav-links">
+        <a href="#downloads">Downloads</a>
+        <a href="#features">Features</a>
+        <a href="#pros-cons">Pros &amp; Cons</a>
+        <a href="https://github.com/othererik/noctisbrowser" class="btn-github" target="_blank" rel="noopener noreferrer">
+          GitHub Repository
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <div class="container hero">
+    <div class="hero-badge">Release v1.1.2 &bull; Open Source (MIT)</div>
+    <h1>Noctis Browser</h1>
+    <p class="hero-subtitle">
+      A zero-admin portable browser built on Electron and Chromium. Designed for disposable, ephemeral sessions with native Tor routing, client fingerprint noise, and real-time network inspection.
+    </p>
+    <div class="hero-meta">
+      <span>Platform: macOS &bull; Linux &bull; Windows</span>
+      <span>Engine: Chromium 146 / Electron 41</span>
+      <span>License: MIT</span>
+      <span>Installation: None required (Portable)</span>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Downloads Section -->
+    <section id="downloads">
+      <h2 class="section-title">Portable Downloads</h2>
+      <p class="section-desc">
+        Pre-built portable bundles require no administrative privileges, no installer, and leave no persistent files in your operating system directories.
+      </p>
+
+      <div class="downloads-grid">
+        <!-- macOS -->
+        <div class="download-card">
+          <div class="card-header">
+            <div>
+              <div class="platform-title">macOS</div>
+              <div class="platform-sub">Apple Silicon (M1/M2/M3/M4) &amp; Intel</div>
+            </div>
+            <svg class="platform-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/>
+              <path d="M12 6v6l4 2"/>
+            </svg>
+          </div>
+          <ul class="package-details">
+            <li><strong>Package:</strong> <code>NoctisBrowser-macOS-Portable.zip</code> (~135 MB)</li>
+            <li><strong>SHA-256:</strong> <code style="font-size: 0.75rem; word-break: break-all;">320e85252b2731e71dd9f2d4fd7d7870d8e9d6cfacf74dcf96e22d9000a3fd06</code></li>
+            <li><strong>Type:</strong> Standalone .app bundle + CLI launcher</li>
+            <li><strong>Requirement:</strong> macOS 12+ (Apple Silicon &amp; Intel)</li>
+            <li><strong>Permissions:</strong> Standard user account (no sudo)</li>
+          </ul>
+          <a href="https://github.com/othererik/noctisbrowser/releases/latest/download/NoctisBrowser-macOS-Portable.zip" class="btn-download">
+            Download for macOS
+          </a>
+          <div class="run-instructions">
+            <strong>How to run:</strong>
+            <ol>
+              <li>Unzip the archive.</li>
+              <li>Double-click <code>Launch-NoctisBrowser.command</code> or <code>NoctisBrowser.app</code>.</li>
+              <li>The launcher automatically clears Gatekeeper quarantine flags in user space.</li>
+            </ol>
+          </div>
+        </div>
+
+        <!-- Linux -->
+        <div class="download-card">
+          <div class="card-header">
+            <div>
+              <div class="platform-title">Linux</div>
+              <div class="platform-sub">Ubuntu, Debian, Fedora, Arch (x86_64)</div>
+            </div>
+            <svg class="platform-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+              <line x1="8" y1="21" x2="16" y2="21"/>
+              <line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+          </div>
+          <ul class="package-details">
+            <li><strong>Package:</strong> <code>NoctisBrowser-Linux-x64-Portable.tar.gz</code> (~18 MB)</li>
+            <li><strong>SHA-256:</strong> <code style="font-size: 0.75rem; word-break: break-all;">d0c283152605309a0592b4f8ad42a71a941cee9dc1cca7864c8db5922f406e99</code></li>
+            <li><strong>Type:</strong> Self-contained directory + launcher script</li>
+            <li><strong>Requirement:</strong> x86_64 Linux distribution</li>
+            <li><strong>Permissions:</strong> Standard user account (no root required)</li>
+          </ul>
+          <a href="https://github.com/othererik/noctisbrowser/releases/latest/download/NoctisBrowser-Linux-x64-Portable.tar.gz" class="btn-download">
+            Download for Linux
+          </a>
+          <div class="run-instructions">
+            <strong>How to run:</strong>
+            <ol>
+              <li>Extract: <code>tar -xzf NoctisBrowser-Linux-x64-Portable.tar.gz</code></li>
+              <li>Enter folder: <code>cd NoctisBrowser-Linux-x64-Portable</code></li>
+              <li>Run: <code>./launch-noctis-browser.sh</code></li>
+            </ol>
+          </div>
+        </div>
+
+        <!-- Windows -->
+        <div class="download-card">
+          <div class="card-header">
+            <div>
+              <div class="platform-title">Windows</div>
+              <div class="platform-sub">Windows 10 / 11 (64-bit)</div>
+            </div>
+            <svg class="platform-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="8" height="8"/>
+              <rect x="13" y="3" width="8" height="8"/>
+              <rect x="3" y="13" width="8" height="8"/>
+              <rect x="13" y="13" width="8" height="8"/>
+            </svg>
+          </div>
+          <ul class="package-details">
+            <li><strong>Package:</strong> <code>NoctisBrowser-Windows-x64-Portable.zip</code> (~18 MB)</li>
+            <li><strong>SHA-256:</strong> <code style="font-size: 0.75rem; word-break: break-all;">7c482927fc0a02a240d73702c37b44380e575abfbeccf3209bad0e1d9569024a</code></li>
+            <li><strong>Type:</strong> Portable folder + batch launcher</li>
+            <li><strong>Requirement:</strong> 64-bit Windows 10 or 11</li>
+            <li><strong>Permissions:</strong> Standard user account (no admin UAC)</li>
+          </ul>
+          <a href="https://github.com/othererik/noctisbrowser/releases/latest/download/NoctisBrowser-Windows-x64-Portable.zip" class="btn-download">
+            Download for Windows
+          </a>
+          <div class="run-instructions">
+            <strong>How to run:</strong>
+            <ol>
+              <li>Extract the ZIP archive.</li>
+              <li>Double-click <code>Launch-NoctisBrowser.bat</code>.</li>
+              <li>Runs from user folder or USB drive without system installation.</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+
+      <!-- Secondary Release Links & Build from Source -->
+      <div class="secondary-download-box">
+        <div>
+          <strong>Looking for specific tags, source code, or checksums?</strong>
+          <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.25rem;">
+            Review all releases, release notes, and SHA-256 integrity hashes on the GitHub Releases page.
+          </p>
+        </div>
+        <div>
+          <a href="https://github.com/othererik/noctisbrowser/releases" class="btn-github" target="_blank" rel="noopener noreferrer">
+            View All GitHub Releases &rarr;
+          </a>
+        </div>
+      </div>
+
+      <div style="margin-top: 1.5rem;">
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem;">Or run directly from source via Node.js:</p>
+        <div class="code-snippet">
+          git clone https://github.com/othererik/noctisbrowser.git &amp;&amp; cd noctisbrowser &amp;&amp; npm install &amp;&amp; npm start
+        </div>
+      </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features">
+      <h2 class="section-title">Core Architecture &amp; Features</h2>
+      <p class="section-desc">
+        A breakdown of what Noctis includes under the hood.
+      </p>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <h3>Zero-Trace Ephemeral Sessions</h3>
+          <p>
+            Noctis boots into an isolated temporary folder in the operating system temp path (<code>os.tmpdir()</code>) with disk caching strictly disabled.
+          </p>
+          <ul>
+            <li>No persistent cookies, history, session tokens, or local storage.</li>
+            <li>On closing the browser, a detached multi-pass background reaper purges the temporary session directory.</li>
+            <li>The "Burn Identity" button allows an immediate cache wipe, circuit rotation, and tab reset mid-session.</li>
+          </ul>
+        </div>
+
+        <div class="feature-card">
+          <h3>Tor &amp; Decentralized Protocol Routing</h3>
+          <p>
+            Native protocol handling without passing queries to clearnet search engines or leaking DNS lookups.
+          </p>
+          <ul>
+            <li>Bundles native Tor binaries for macOS, Linux, and Windows; auto-detects existing local Tor daemons.</li>
+            <li>Direct routing for <code>.onion</code> hidden services without external proxy configuration.</li>
+            <li>Built-in resolution support for <code>.i2p</code>, <code>.loki</code>, <code>ipfs://</code>, and <code>.eth</code> addresses.</li>
+          </ul>
+        </div>
+
+        <div class="feature-card">
+          <h3>Anti-Fingerprinting Protections</h3>
+          <p>
+            Reduces browser distinctiveness against automated canvas and hardware profiling scripts.
+          </p>
+          <ul>
+            <li><strong>Viewport Letterboxing:</strong> Quantizes inner window dimensions to uniform 200&times;100 pixel buckets.</li>
+            <li><strong>Canvas &amp; Audio Noise:</strong> Introduces deterministic micro-jitter to canvas readbacks and audio context buffers.</li>
+            <li><strong>Hardware Normalization:</strong> Spoofs uniform screen metrics, masks sensor APIs (gyroscope, accelerometer), and normalizes storage quota estimates.</li>
+          </ul>
+        </div>
+
+        <div class="feature-card">
+          <h3>Live Network Cockpit (noctis://monitor)</h3>
+          <p>
+            Provides Chrome DevTools Protocol request inspection and verifiable egress testing directly in the UI.
+          </p>
+          <ul>
+            <li>Live network request stream grouped by host and initiating script.</li>
+            <li>Built-in ad and tracker blocking backed by community blocklist feeds (Peter Lowe, StevenBlack).</li>
+            <li><strong>4-Hop Path Diagnostic:</strong> Checks unproxied baseline IP against the active tunnel exit IP to verify that traffic is actually masked before reporting success.</li>
+          </ul>
+        </div>
+
+        <div class="feature-card">
+          <h3>Privacy Vault (noctis://vault)</h3>
+          <p>
+            Transparent interface for inspecting and controlling what data is being held in memory and temporary storage.
+          </p>
+          <ul>
+            <li>Live file browser showing every ephemeral file currently written to the temp directory.</li>
+            <li>OS/hardware persona switcher (macOS Apple Silicon, Windows NVIDIA RTX, Linux AMD Radeon).</li>
+            <li>DNS-over-HTTPS (DoH) configuration with mandatory DNSSEC (<code>AD=1</code>) verification.</li>
+          </ul>
+        </div>
+
+        <div class="feature-card">
+          <h3>Zero-Admin Portability</h3>
+          <p>
+            Designed to run entirely in user space without touching system directories.
+          </p>
+          <ul>
+            <li>No installers, system registry changes, or elevated administrative privileges needed.</li>
+            <li>Can be run directly from an external USB drive or temporary workspace.</li>
+            <li>Includes platform-specific launchers that handle Linux user-space sandbox flags and macOS quarantine clearing.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pros and Cons Section -->
+    <section id="pros-cons">
+      <h2 class="section-title">Pros &amp; Cons</h2>
+
+      <div class="pros-cons-grid">
+        <!-- Pros -->
+        <div class="pro-box">
+          <h3>Advantages</h3>
+          <ul class="point-list">
+            <li>
+              <strong>Truly disposable browsing</strong>
+              Everything written during a session disappears when the process terminates. No manual browsing history clearing or private window management required.
+            </li>
+            <li>
+              <strong>Zero installation friction</strong>
+              Unpack the folder and execute the launcher script. Runs on standard user accounts without sudo or administrator privileges.
+            </li>
+            <li>
+              <strong>Built-in Tor handling</strong>
+              Routes <code>.onion</code> sites out of the box using bundled Tor binaries without needing manual SOCKS proxy setups.
+            </li>
+            <li>
+              <strong>Verifiable network routing</strong>
+              The diagnostic tool tests both unproxied and proxied paths against external IP endpoints, ensuring the browser never falsely claims protection when a proxy fails.
+            </li>
+            <li>
+              <strong>Live observability</strong>
+              The built-in CDP cockpit exposes network requests, active cookies, and temp files with transparency rarely present in consumer browsers.
+            </li>
+          </ul>
+        </div>
+
+        <!-- Cons -->
+        <div class="con-box">
+          <h3>Trade-offs &amp; Limitations</h3>
+          <ul class="point-list">
+            <li>
+              <strong>Resource overhead (Electron &amp; Chromium)</strong>
+              Because it is built on Electron, cold start times are longer and RAM usage is substantially higher than lightweight native browsers or vanilla Firefox.
+            </li>
+            <li>
+              <strong>No persistent session state</strong>
+              If you want to stay logged into email accounts, keep saved passwords, or retain tab layouts across reboots, Noctis is the wrong tool.
+            </li>
+            <li>
+              <strong>Website compatibility breakage</strong>
+              Canvas perturbation, letterbox sizing, sensor blocking, and strict client-hint spoofing can cause layout glitches, CAPTCHA triggers, or broken functionality on complex web apps and DRM streaming sites.
+            </li>
+            <li>
+              <strong>Not a direct replacement for Tor Browser</strong>
+              The official Tor Browser benefits from decades of Firefox C++ code modifications and a large, standardized user pool. Noctis provides convenient Tor routing and client-side noise, but it does not give the exact same mathematical anonymity set.
+            </li>
+            <li>
+              <strong>No extension ecosystem</strong>
+              You cannot install extensions from the Chrome Web Store or Firefox Add-ons. You are limited to the built-in ad/tracker blocklists and privacy controls.
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container footer-content">
+      <div>
+        <strong>Noctis Browser Project</strong> &bull; Released under the MIT License
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/othererik/noctisbrowser" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://github.com/othererik/noctisbrowser/releases" target="_blank" rel="noopener noreferrer">Releases</a>
+        <a href="https://github.com/othererik/noctisbrowser/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">License</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

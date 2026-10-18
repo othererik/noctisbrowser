@@ -13,6 +13,7 @@
     "package:mac": "node scripts/package_macos.js",
     "dist:mac": "node scripts/package_macos.js",
     "dist:portable": "node scripts/package_portable.js",
+    "package:archives": "node scripts/package_archives.js",
     "dist": "node scripts/package_portable.js"
   },
   "keywords": [
