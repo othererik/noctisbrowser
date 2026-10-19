@@ -57,7 +57,7 @@
           <div class="card-header">
             <div>
               <div class="platform-title">macOS</div>
-              <div class="platform-sub">Apple Silicon (M1/M2/M3/M4) &amp; Intel</div>
+              <div class="platform-sub">Native Apple Silicon (arm64) &amp; Intel (x64)</div>
             </div>
             <svg class="platform-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/>
@@ -65,21 +65,24 @@
             </svg>
           </div>
           <ul class="package-details">
-            <li><strong>Package:</strong> <code>NoctisBrowser-macOS-Portable.zip</code> (~135 MB)</li>
-            <li><strong>SHA-256:</strong> <code style="font-size: 0.75rem; word-break: break-all;">320e85252b2731e71dd9f2d4fd7d7870d8e9d6cfacf74dcf96e22d9000a3fd06</code></li>
-            <li><strong>Type:</strong> Standalone .app bundle + CLI launcher</li>
-            <li><strong>Requirement:</strong> macOS 12+ (Apple Silicon &amp; Intel)</li>
+            <li><strong>Apple Silicon (arm64):</strong> <code>NoctisBrowser-macOS-arm64-Portable.zip</code> (~117 MB)<br>
+              <span style="font-size: 0.75rem; color: var(--text-dim);">SHA-256: <code style="word-break: break-all;">4f819b7b6bf60366186dcca389af7446c277f15f7b9b2e1986067a8e4139aa21</code></span></li>
+            <li><strong>Intel (x86_64):</strong> <code>NoctisBrowser-macOS-x64-Portable.zip</code> (~125 MB)<br>
+              <span style="font-size: 0.75rem; color: var(--text-dim);">SHA-256: <code style="word-break: break-all;">49af793f3970efa325c4ea332d9874de3507ed34c635d8b988aca7394dd67c6a</code></span></li>
             <li><strong>Permissions:</strong> Standard user account (no sudo)</li>
           </ul>
-          <a href="https://github.com/othererik/noctisbrowser/releases/latest/download/NoctisBrowser-macOS-Portable.zip" class="btn-download">
-            Download for macOS
+          <a href="https://github.com/othererik/noctisbrowser/releases/latest/download/NoctisBrowser-macOS-arm64-Portable.zip" class="btn-download">
+            Download for Apple Silicon (M1–M4)
+          </a>
+          <a href="https://github.com/othererik/noctisbrowser/releases/latest/download/NoctisBrowser-macOS-x64-Portable.zip" class="btn-github" style="justify-content: center; margin-bottom: 0.75rem; padding: 0.6rem 1rem;">
+            Download for Intel Mac (x86_64)
           </a>
           <div class="run-instructions">
             <strong>How to run (no admin / bypass Gatekeeper):</strong>
             <ol>
               <li>Unzip the archive in <code>~/Downloads</code>.</li>
               <li>Open <strong>Terminal</strong> and run (no <code>sudo</code> needed):<br>
-                <code>sh ~/Downloads/NoctisBrowser-macOS-Portable/Launch-NoctisBrowser.command</code></li>
+                <code>sh ~/Downloads/NoctisBrowser-macOS-arm64-Portable/Launch-NoctisBrowser.command</code></li>
               <li>This strips the browser quarantine flag in user-space so <code>NoctisBrowser.app</code> opens normally on future double-clicks.</li>
             </ol>
           </div>
@@ -100,7 +103,7 @@
           </div>
           <ul class="package-details">
             <li><strong>Package:</strong> <code>NoctisBrowser-Linux-x64-Portable.tar.gz</code> (~18 MB)</li>
-            <li><strong>SHA-256:</strong> <code style="font-size: 0.75rem; word-break: break-all;">d0c283152605309a0592b4f8ad42a71a941cee9dc1cca7864c8db5922f406e99</code></li>
+            <li><strong>SHA-256:</strong> <code style="font-size: 0.75rem; word-break: break-all;">10f3ebea26a276c47338cdc4e077a16db18df7e4c87ab7a9b3f937a5e08fc9f2</code></li>
             <li><strong>Type:</strong> Self-contained directory + launcher script</li>
             <li><strong>Requirement:</strong> x86_64 Linux distribution</li>
             <li><strong>Permissions:</strong> Standard user account (no root required)</li>
@@ -134,7 +137,7 @@
           </div>
           <ul class="package-details">
             <li><strong>Package:</strong> <code>NoctisBrowser-Windows-x64-Portable.zip</code> (~18 MB)</li>
-            <li><strong>SHA-256:</strong> <code style="font-size: 0.75rem; word-break: break-all;">7c482927fc0a02a240d73702c37b44380e575abfbeccf3209bad0e1d9569024a</code></li>
+            <li><strong>SHA-256:</strong> <code style="font-size: 0.75rem; word-break: break-all;">85e5d9cf70f1e177fe70e760e49960e05d0762dbbc973c60d8171f1db64c7d34</code></li>
             <li><strong>Type:</strong> Portable folder + batch launcher</li>
             <li><strong>Requirement:</strong> 64-bit Windows 10 or 11</li>
             <li><strong>Permissions:</strong> Standard user account (no admin UAC)</li>

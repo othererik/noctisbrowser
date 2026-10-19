@@ -20,25 +20,29 @@ function calculateSha256(filePath) {
   return hash.digest('hex');
 }
 
+function zipMacFolder(folderName, zipName, checksums) {
+  const srcDir = path.join(distDir, folderName);
+  const dstZip = path.join(distDir, zipName);
+  if (!fs.existsSync(srcDir)) return;
+  console.log(`Compressing ${zipName}...`);
+  if (fs.existsSync(dstZip)) fs.unlinkSync(dstZip);
+  try {
+    execSync(`ditto -c -k --sequesterRsrc --keepParent "${srcDir}" "${dstZip}"`);
+  } catch (_) {
+    execSync(`cd "${distDir}" && zip -r -q "${zipName}" "${folderName}"`);
+  }
+  const sizeMb = (fs.statSync(dstZip).size / (1024 * 1024)).toFixed(1);
+  const sha = calculateSha256(dstZip);
+  checksums.push({ file: zipName, size: `${sizeMb} MB`, sha256: sha });
+  console.log(`✅ Created: ${zipName} (${sizeMb} MB)`);
+}
+
 const checksums = [];
 
-// 1. macOS Portable Zip
-const macDir = path.join(distDir, 'NoctisBrowser-macOS-Portable');
-const macZip = path.join(distDir, 'NoctisBrowser-macOS-Portable.zip');
-if (fs.existsSync(macDir)) {
-  console.log('Compressing macOS Portable archive...');
-  if (fs.existsSync(macZip)) fs.unlinkSync(macZip);
-  // Using ditto or zip to preserve symlinks and permissions
-  try {
-    execSync(`ditto -c -k --sequesterRsrc --keepParent "${macDir}" "${macZip}"`);
-  } catch (_) {
-    execSync(`cd "${distDir}" && zip -r -q "NoctisBrowser-macOS-Portable.zip" "NoctisBrowser-macOS-Portable"`);
-  }
-  const sizeMb = (fs.statSync(macZip).size / (1024 * 1024)).toFixed(1);
-  const sha = calculateSha256(macZip);
-  checksums.push({ file: 'NoctisBrowser-macOS-Portable.zip', size: `${sizeMb} MB`, sha256: sha });
-  console.log(`✅ Created: NoctisBrowser-macOS-Portable.zip (${sizeMb} MB)`);
-}
+// 1. macOS Apple Silicon (arm64) & Intel (x64) Portable Zips
+zipMacFolder('NoctisBrowser-macOS-arm64-Portable', 'NoctisBrowser-macOS-arm64-Portable.zip', checksums);
+zipMacFolder('NoctisBrowser-macOS-x64-Portable', 'NoctisBrowser-macOS-x64-Portable.zip', checksums);
+zipMacFolder('NoctisBrowser-macOS-Portable', 'NoctisBrowser-macOS-Portable.zip', checksums);
 
 // 2. Linux x64 Tarball
 const linuxDir = path.join(distDir, 'NoctisBrowser-Linux-x64-Portable');
