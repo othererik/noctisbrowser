@@ -62,10 +62,10 @@ app.commandLine.appendSwitch('webrtc-ip-handling-policy', 'disable_non_proxied_u
 app.commandLine.appendSwitch('enforce-webrtc-ip-permission-check');
 app.commandLine.appendSwitch('disable-webrtc-multiple-routes');
 
-// Force DNS-over-HTTPS with strict DNSSEC validation across Chromium engine
-app.commandLine.appendSwitch('enable-features', 'DnsOverHttps');
-app.commandLine.appendSwitch('dns-over-https-mode', 'automatic');
-app.commandLine.appendSwitch('dns-over-https-templates', 'https://1.1.1.2/dns-query{?dns}');
+// Force strict DNS-over-HTTPS with fail-closed security and Encrypted Client Hello (ECH) across Chromium engine
+app.commandLine.appendSwitch('enable-features', 'DnsOverHttps,EncryptedClientHello');
+app.commandLine.appendSwitch('dns-over-https-mode', 'secure');
+app.commandLine.appendSwitch('dns-over-https-templates', 'https://1.1.1.2/dns-query{?dns} https://9.9.9.9/dns-query{?dns}');
 
 // Zero-admin portable execution on Linux (Fedora/Ubuntu/Arch):
 // Unpacked portable builds do not have root-owned SUID chrome-sandbox (4755), so enable user-space execution without sudo.

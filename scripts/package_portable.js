@@ -5,6 +5,7 @@ const { execSync } = require('child_process');
 console.log('=== Building Zero-Admin Portable Distributions (macOS arm64 & x64, Linux x64, Windows x64) ===\n');
 
 const rootDir = path.join(__dirname, '..');
+const pkgVersion = require('../package.json').version;
 const distDir = path.join(rootDir, 'dist');
 fs.mkdirSync(distDir, { recursive: true });
 
@@ -42,7 +43,7 @@ function populateMacPortableFolder(portableDir, sourceAppPath, archLabel) {
   fs.writeFileSync(
     path.join(portableDir, 'README-PORTABLE.txt'),
     [
-      `NoctisBrowser v1.1.2 — Zero-Admin Portable Edition (macOS ${archLabel})`,
+      `NoctisBrowser v${pkgVersion} — Zero-Admin Portable Edition (macOS ${archLabel})`,
       '========================================================================',
       '1. No administrator/root privileges or installer required.',
       '2. Note on macOS Gatekeeper ("unknown developer" block):',
@@ -152,7 +153,7 @@ async function main() {
   fs.writeFileSync(
     path.join(linuxPortableDir, 'README-PORTABLE.txt'),
     [
-      'NoctisBrowser v1.1.2 — Zero-Admin Portable Edition (Linux x86_64)',
+      `NoctisBrowser v${pkgVersion} — Zero-Admin Portable Edition (Linux x86_64)`,
       '=================================================================',
       '1. No root/sudo or chrome-sandbox SUID permissions required.',
       '2. Bundled with native Linux x86_64 Tor daemon + libevent/libssl/libcrypto + GeoIP databases.',
@@ -195,7 +196,7 @@ async function main() {
   fs.writeFileSync(
     path.join(winPortableDir, 'README-PORTABLE.txt'),
     [
-      'NoctisBrowser v1.1.2 — Zero-Admin Portable Edition (Windows x64)',
+      `NoctisBrowser v${pkgVersion} — Zero-Admin Portable Edition (Windows x64)`,
       '================================================================',
       '1. No administrator privileges or installer required.',
       '2. Bundled with native Windows x64 Tor daemon (tor.exe) + GeoIP databases.',

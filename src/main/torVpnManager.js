@@ -1117,15 +1117,25 @@ class TorVpnManager extends EventEmitter {
             }
           }
 
-          const resolvedIp = await this.resolveHostViaDoH(targetHost);
           const isLoopback = this._isLoopbackHost(targetHost);
           const upstreamSocksPort = this._getUpstreamSocksPort(targetHost);
+          const resolvedIp = (!isLoopback && !upstreamSocksPort && this.dnsOverHttps)
+            ? await this.resolveHostViaDoH(targetHost)
+            : null;
 
           // Fail-closed protection: never leak local IP if VPN/Tor is active and upstream relay is down
           if (!isLoopback && (this.mode === 'built-in-vpn' || this.mode === 'tor') && !upstreamSocksPort && !this.allowUnmaskedFallback) {
             this.metrics.blockedByKillSwitch++;
             clientRes.writeHead(502, { 'Content-Type': 'text/plain' });
             clientRes.end('Noctis Browser VPN Fail-Closed: Upstream anonymizing exit relay is offline. Local IP leak prevented.');
+            return;
+          }
+
+          // Strict DoH Fail-Closed: if DoH is active and cannot resolve targetHost, reject to prevent plaintext DNS leak
+          if (!isLoopback && !upstreamSocksPort && this.dnsOverHttps && !resolvedIp) {
+            this.metrics.blockedByKillSwitch = (this.metrics.blockedByKillSwitch || 0) + 1;
+            clientRes.writeHead(502, { 'Content-Type': 'text/plain' });
+            clientRes.end('Noctis Browser DoH Fail-Closed: Strict DNS-over-HTTPS resolution failed. Plaintext DNS leak prevented.');
             return;
           }
 
@@ -1186,13 +1196,11 @@ class TorVpnManager extends EventEmitter {
         const port = parseInt(rawPort, 10) || 443;
 
         try {
-          // Validate DNSSEC & DoH
-          const connectHost = await this.resolveHostViaDoH(rawHost);
           const isLoopback = this._isLoopbackHost(rawHost);
           const upstreamSocksPort = this._getUpstreamSocksPort(rawHost);
 
           if (upstreamSocksPort) {
-            // Route through country-pinned SOCKS5 exit relay so origin IP is truly masked
+            // Route through country-pinned SOCKS5 exit relay (remote DNS resolution at exit relay; zero local DNS leak)
             const targetSocket = await this._connectViaSocks5(upstreamSocksPort, rawHost, port);
             this.activeSockets.add(targetSocket);
             targetSocket.on('close', () => this.activeSockets.delete(targetSocket));
@@ -1227,6 +1235,20 @@ class TorVpnManager extends EventEmitter {
           // Fail-closed if VPN or Tor mode is active without an upstream exit relay (unless allowUnmaskedFallback is explicitly set)
           if (!isLoopback && (this.mode === 'built-in-vpn' || this.mode === 'tor') && !this.allowUnmaskedFallback) {
             this.metrics.blockedByKillSwitch++;
+            try {
+              clientSocket.write('HTTP/1.1 502 Bad Gateway\r\n\r\n');
+              clientSocket.destroy();
+            } catch (_) {}
+            return;
+          }
+
+          // Strict DoH resolution for direct connections without upstream SOCKS5
+          const connectHost = (!isLoopback && this.dnsOverHttps)
+            ? await this.resolveHostViaDoH(rawHost)
+            : rawHost;
+
+          if (!isLoopback && this.dnsOverHttps && !connectHost) {
+            this.metrics.blockedByKillSwitch = (this.metrics.blockedByKillSwitch || 0) + 1;
             try {
               clientSocket.write('HTTP/1.1 502 Bad Gateway\r\n\r\n');
               clientSocket.destroy();
@@ -1367,13 +1389,18 @@ class TorVpnManager extends EventEmitter {
     };
 
     let resolvedIp = await queryEndpoint(dohUrl);
-    // If the relay endpoint fails or doesn't support JSON, fallback to Cloudflare DNSSEC DoH
-    if (!resolvedIp && !dohUrl.includes('cloudflare-dns.com')) {
-      const fallbackUrl = `https://security.cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A${doFlag}`;
+    // If the relay endpoint fails or doesn't support JSON, fallback to direct IP Cloudflare DoH (avoids bootstrap DNS leak)
+    if (!resolvedIp) {
+      const fallbackUrl = `https://1.1.1.2/dns-query?name=${encodeURIComponent(hostname)}&type=A${doFlag}`;
       resolvedIp = await queryEndpoint(fallbackUrl);
     }
+    // High-availability secondary secure DoH fallback (Quad9 direct IP endpoint)
+    if (!resolvedIp) {
+      const quad9Url = `https://9.9.9.9/dns-query?name=${encodeURIComponent(hostname)}&type=A${doFlag}`;
+      resolvedIp = await queryEndpoint(quad9Url);
+    }
 
-    return resolvedIp || hostname;
+    return resolvedIp || null;
   }
 
   // --- Dark Web & Decentralized Protocol URL Resolver ---
