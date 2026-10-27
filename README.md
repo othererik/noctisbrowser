@@ -157,7 +157,7 @@ flowchart TD
 
   subgraph ModeDirect["Mode A: Direct Clearnet (mode = 'direct')"]
     DirectSplit{".onion / .i2p Host?"}
-    DirectClear["DIRECT Clearnet Socket<br/>+ Chromium DoH (https://1.1.1.2/dns-query)"]
+    DirectClear["DIRECT Clearnet Socket<br/>+ Strict Fail-Closed DoH (1.1.1.2 &amp; 9.9.9.9) + ECH"]
     DirectOnion["Auto Split-Tunnel to Local Tor SOCKS5<br/>(127.0.0.1:9050 / 9250) or HTTPS Onion Bridge"]
   end
 
@@ -283,7 +283,7 @@ sequenceDiagram
 | **Clearnet Routing** | Direct (`DIRECT`) | Local Tunnel $\rightarrow$ Country-Pinned SOCKS5 Exit Relay | 3-Hop Tor SOCKS5h (`127.0.0.1:9050`/`9250`) | Local Tunnel / I2P Outproxy |
 | **Public Egress IP** | Local ISP IP | **Masked** (`{ch}`, `{is}`, `{se}`, `{us}`, `{de}` Exit Node) | **Masked** (Dynamic Tor Exit Relay) | **Masked** (I2P / Tunnel) |
 | **`.onion` Hidden Services** | Auto Split-Tunneled to Tor SOCKS5 / Bridge | Native via Bundled Tor Daemon | Native via Bundled Tor Daemon | Native via Bundled Tor Daemon |
-| **DNS Resolution** | Chromium DoH (`1.1.1.2`) | DoH (`cd=0`) + Remote SOCKS5 (`ATYP 0x03`) | Remote Tor `DNSPort` / SOCKS5h (`ATYP 0x03`) | DoH + I2P Naming Service |
+| **DNS Resolution** | Strict DoH (`secure` mode: `1.1.1.2` / `9.9.9.9`) + ECH | Strict DoH (`cd=0`) + Remote SOCKS5 (`ATYP 0x03`) | Remote Tor `DNSPort` / SOCKS5h (`ATYP 0x03`) | DoH + I2P Naming Service |
 | **DNSSEC Enforcement** | Forced (`AD=1` verified) | Forced (`AD=1` verified) | Enforced by Exit Relay + DoH | Forced (`AD=1` verified) |
 | **Plaintext HTTP (`http://`)** | Upgraded when `requireSecureTraffic` ON | Automatically Upgraded to `https://` | Automatically Upgraded to `https://` (except `.onion`) | Automatically Upgraded (except `.i2p`) |
 | **If Upstream Daemon Drops** | N/A | **Fails Closed (`502`)** — Never leaks local IP | **Blackholes (`127.0.0.1:9`)** when Kill-Switch ON | Blackholes when Kill-Switch ON |

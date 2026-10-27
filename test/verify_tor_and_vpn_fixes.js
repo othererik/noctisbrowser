@@ -17,9 +17,9 @@ if (process.platform === 'linux') {
 }
 app.commandLine.appendSwitch('disable-http-cache');
 app.commandLine.appendSwitch('incognito');
-app.commandLine.appendSwitch('enable-features', 'DnsOverHttps');
-app.commandLine.appendSwitch('dns-over-https-mode', 'automatic');
-app.commandLine.appendSwitch('dns-over-https-templates', 'https://1.1.1.2/dns-query{?dns}');
+app.commandLine.appendSwitch('enable-features', 'DnsOverHttps,EncryptedClientHello');
+app.commandLine.appendSwitch('dns-over-https-mode', 'secure');
+app.commandLine.appendSwitch('dns-over-https-templates', 'https://1.1.1.2/dns-query{?dns} https://9.9.9.9/dns-query{?dns}');
 
 setTimeout(() => {
   console.error('❌ TIMEOUT: verify_tor_and_vpn_fixes exceeded 45s');
